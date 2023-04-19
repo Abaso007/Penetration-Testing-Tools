@@ -73,14 +73,14 @@ def info(txt):
     sys.stderr.write(txt + '\n')
 
 def warning(txt):
-    info('[?] ' + txt)
+    info(f'[?] {txt}')
 
 def error(txt):
-    info('[!] ' + txt)
+    info(f'[!] {txt}')
 
 def dbg(txt):
     if DEBUG:
-        info('[dbg] '+txt)
+        info(f'[dbg] {txt}')
 
 # or maybe:
 #   class PaddingOracleTestCasesWithVaryingSecondToTheLastBlockGenerator
@@ -192,10 +192,7 @@ class PaddingOracleTestCasesGenerator:
                 return data
 
         enc = _enc(data)
-        if self.urlencoded:
-            return urllib.quote_plus(enc)
-        else:
-            return enc
+        return urllib.quote_plus(enc) if self.urlencoded else enc
 
     def decode(self, data):
         def _decode(self, data):
@@ -242,9 +239,20 @@ class PaddingOracleTestCasesGenerator:
                 cases.append(self.encode(self.construct_second_to_last_block(data, size, byte)))
 
                 if self.offset != 0:
-                    cases.append(self.encode(self.construct_second_to_last_block(data, size, byte, self.offset)))
-                    cases.append(self.encode(self.construct_second_to_last_block(data, size, byte, -self.offset)))
-         
+                    cases.extend(
+                        (
+                            self.encode(
+                                self.construct_second_to_last_block(
+                                    data, size, byte, self.offset
+                                )
+                            ),
+                            self.encode(
+                                self.construct_second_to_last_block(
+                                    data, size, byte, -self.offset
+                                )
+                            ),
+                        )
+                    )
         return cases
 
 def hex_dump(data):
@@ -268,7 +276,7 @@ def hex_dump(data):
 
         for j in range(n-16, n):
             if j >= len(data): break
-            c = data[j] if not (ord(data[j]) < 0x20 or ord(data[j]) > 0x7e) else '.'
+            c = data[j] if ord(data[j]) >= 0x20 and ord(data[j]) <= 0x7e else '.'
             line += '%c' % c
 
         lines.append(line)

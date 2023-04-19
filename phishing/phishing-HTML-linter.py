@@ -85,22 +85,20 @@ class Logger:
     #   def out(txt, mode='info ', fd=None, color=None, noprefix=False, newline=True):
     @staticmethod
     def out(txt, fd, mode='info ', **kwargs):
-        if txt == None or fd == 'none':
-            return 
-        elif fd == None:
+        if txt is None or fd == 'none':
+            return
+        elif fd is None:
             raise Exception('[ERROR] Logging descriptor has not been specified!')
 
         args = {
-            'color': None, 
-            'noprefix': False, 
+            'color': None,
+            'noprefix': False,
             'newline': True,
-            'nocolor' : False
-        }
-        args.update(kwargs)
-
+            'nocolor': False,
+        } | kwargs
         if type(txt) != str:
             txt = str(txt)
-            
+
         txt = txt.replace('\t', ' ' * 4)
 
         if args['nocolor']:
@@ -114,36 +112,28 @@ class Logger:
 
         prefix = ''
         if mode:
-            mode = '[%s] ' % mode
-            
+            mode = f'[{mode}] '
+
         if not args['noprefix']:
             if args['nocolor']:
                 prefix = mode.upper()
             else:
-                prefix = Logger.with_color(Logger.colors_dict['other'], '%s' 
-                % (mode.upper()))
-        
-        nl = ''
-        if 'newline' in args:
-            if args['newline']:
-                nl = '\n'
+                prefix = Logger.with_color(Logger.colors_dict['other'], f'{mode.upper()}')
 
+        nl = '\n' if 'newline' in args and args['newline'] else ''
         if 'force_stdout' in args:
             fd = sys.stdout
 
         if type(fd) == str:
             with open(fd, 'a') as f:
-                prefix2 = ''
-                if mode: 
-                    prefix2 = '%s' % (mode.upper())
+                prefix2 = f'{mode.upper()}' if mode else ''
                 f.write(prefix2 + txt + nl)
                 f.flush()
 
+        elif args['nocolor']:
+            fd.write(prefix + txt + nl)
         else:
-            if args['nocolor']:
-                fd.write(prefix + txt + nl)
-            else:
-                fd.write(prefix + Logger.with_color(col, txt) + nl)
+            fd.write(prefix + Logger.with_color(col, txt) + nl)
 
     # Info shall be used as an ordinary logging facility, for every desired output.
     def info(self, txt, forced = False, **kwargs):
@@ -579,7 +569,7 @@ class PhishingMailParser:
             pos = s.find(part)
             if pos != -1:
                 a = pos - 100
-                if a < 0: a = 0 
+                a = max(a, 0)
                 b = pos + len(part) + 100
                 if b > len(s): b = -1
                 return f'... {s[a:b]} ...'
@@ -650,7 +640,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
 
                         context += '\n' + line + '\n'
 
-            if len(found) > 0:
+            if found:
                 totalFound += len(found)
                 result += f'- Found {logger.colored(len(found), "red")} {logger.colored(title, "yellow")} words {logger.colored(words[0], "cyan")}:\n'
 
@@ -679,14 +669,13 @@ Therefore you will have better chances of delivering your phishing e-mail when y
         num = 0
         embed = ''
 
-        for link in links:       
+        for link in links:   
             text = str(link)
             pos = text.find('>')
             code = text[pos+1:]
 
-            m = re.search(r'(.+)<\s*/\s*a\s*>', code, re.I)
-            if m:
-                code = m.group(1)
+            if m := re.search(r'(.+)<\s*/\s*a\s*>', code, re.I):
+                code = m[1]
 
             suspicious = '<' in text and '>' in text
 
@@ -698,7 +687,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
                     tmp = text[:N]
 
                     if len(text) > N:
-                        tmp += ' ... ' + text[-N:]
+                        tmp += f' ... {text[-N:]}'
 
                     context += tmp + '\n'
 
@@ -709,19 +698,15 @@ Therefore you will have better chances of delivering your phishing e-mail when y
             result += f'- Found {num} <a> tags that contained HTML code inside!\n'
             result +=  '\t  Links conveying HTML code within <a> ... </a> may greatly increase message Spam score!\n'
 
-        if len(result) == 0:
-            return []
-
-        return {
-            'description' : desc,
-            'context' : context,
-            'analysis' : result
-        }
+        return (
+            {'description': desc, 'context': context, 'analysis': result}
+            if result
+            else []
+        )
 
     def testLinksWithGETParams(self):
         links = self.soup('a')
 
-        desc = 'Links in URLs contained potentially suspicious GET parameters that are known from Phishing platforms or other TA campaigns. They might be noticed by anti-spam filters.'
         context = ''
         result = ''
         num = 0
@@ -732,11 +717,9 @@ Therefore you will have better chances of delivering your phishing e-mail when y
                 href = link['href']
             except:
                 continue
-        
-            text = link.getText().replace('\n', '').strip()
-            params = dict(parse.parse_qsl(parse.urlsplit(href).query))
 
-            if len(params) > 0:
+            text = link.getText().replace('\n', '').strip()
+            if params := dict(parse.parse_qsl(parse.urlsplit(href).query)):
                 num += 1
 
                 if num < 5:
@@ -748,10 +731,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
 
                     hr = hr.replace('\n', '').strip()
                     context += f'\thref = "{hr}"\n\n'
-                    f = ''
-                    for k, v in params.items():
-                        f += f'{k}={v[:5]}..., '
-
+                    f = ''.join(f'{k}={v[:5]}..., ' for k, v in params.items())
                     context += f'\tparams = {f}\n\n'
 
         if num > 0:
@@ -760,6 +740,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
         if len(result) == 0:
             return []
 
+        desc = 'Links in URLs contained potentially suspicious GET parameters that are known from Phishing platforms or other TA campaigns. They might be noticed by anti-spam filters.'
         return {
             'description' : desc,
             'context' : context,
@@ -781,11 +762,9 @@ Therefore you will have better chances of delivering your phishing e-mail when y
                 href = link['href']
             except:
                 continue
-        
-            text = link.getText().replace('\n', '').strip()
-            params = dict(parse.parse_qsl(parse.urlsplit(href).query))
 
-            if len(params) > 0:
+            text = link.getText().replace('\n', '').strip()
+            if params := dict(parse.parse_qsl(parse.urlsplit(href).query)):
                 num += 1
 
                 if num < 5:
@@ -797,24 +776,18 @@ Therefore you will have better chances of delivering your phishing e-mail when y
 
                     hr = hr.replace('\n', '').strip()
                     context += f'\thref = "{hr}"\n\n'
-                    f = ''
-                    for k, v in params.items():
-                        f += f'{k}={v[:5]}..., '
-
+                    f = ''.join(f'{k}={v[:5]}..., ' for k, v in params.items())
                     context += f'\tparams = {f}\n\n'
 
         if num > 0:
             result += f'- Found {logger.colored(num, "red")} <a> tags with href="..." {logger.colored("URLs containing GET params", "yellow")}.\n'
             result +=  '\t  Links with URLs that contain GET params might trigger anti-spam rule (Office365: 21615005)\n'
 
-        if len(result) == 0:
-            return []
-
-        return {
-            'description' : desc,
-            'context' : context,
-            'analysis' : result
-        }
+        return (
+            {'description': desc, 'context': context, 'analysis': result}
+            if result
+            else []
+        )
 
     def testLinksWithDangerousExtensions(self):
         links = self.soup('a')
@@ -830,7 +803,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
                 href = link['href']
             except:
                 continue
-        
+
             text = link.getText()
             parsed = parse.urlsplit(href)
 
@@ -862,14 +835,11 @@ Therefore you will have better chances of delivering your phishing e-mail when y
             result += f'- Found {num} <a> tags with href="..." URLs pointing to files with dangerous extensions (such as .exe).\n'
             result +=  '\t  Links with URLs that point to potentially executable files might trigger anti-spam rule (Office365: 460985005)\n'
 
-        if len(result) == 0:
-            return []
-
-        return {
-            'description' : desc,
-            'context' : context,
-            'analysis' : result
-        }
+        return (
+            {'description': desc, 'context': context, 'analysis': result}
+            if result
+            else []
+        )
 
     def testLinksWithGETParamsBeingURLs(self):
         links = self.soup('a')
@@ -885,18 +855,16 @@ Therefore you will have better chances of delivering your phishing e-mail when y
                 href = link['href']
             except:
                 continue
-        
+
             text = link.getText()
             params = dict(parse.parse_qsl(parse.urlsplit(href).query))
 
             url = re.compile(r'((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([a-zA-Z0-9\.\&\/\?\:@\-_=#])*')
 
-            if len(params) > 0:
-                for k, v in params.items():
-                    m = url.match(v)
-
-                    if m:
-                        urlmatched = m.group(1)
+            if params:
+                for v in params.values():
+                    if m := url.match(v):
+                        urlmatched = m[1]
                         num += 1
 
                         if num < 5:
@@ -913,14 +881,11 @@ Therefore you will have better chances of delivering your phishing e-mail when y
             result += f'- Found {num} <a> tags with href="..." URLs containing GET params containing another URL.\n'
             result +=  '\t  Links with URLs that contain GET params with another URL might trigger anti-spam rule (Office365: 45080400002)\n'
 
-        if len(result) == 0:
-            return []
-
-        return {
-            'description' : desc,
-            'context' : context,
-            'analysis' : result
-        }
+        return (
+            {'description': desc, 'context': context, 'analysis': result}
+            if result
+            else []
+        )
 
 
     def testMaskedLinks(self):
@@ -937,7 +902,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
                 href = link['href']
             except:
                 continue
-        
+
             text = link.getText()
 
             url = re.compile(r'((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([a-zA-Z0-9\.\&\/\?\:@\-_=#])*')
@@ -958,14 +923,11 @@ Therefore you will have better chances of delivering your phishing e-mail when y
             result += f'- Found {num} <a> tags that masquerade their href="" links with text!\n'
             result +=  '\t  Links that try to hide underyling URL are harmful and will be considered as Spam!\n'
 
-        if len(result) == 0:
-            return []
-
-        return {
-            'description' : desc,
-            'context' : context,
-            'analysis' : result
-        }
+        return (
+            {'description': desc, 'context': context, 'analysis': result}
+            if result
+            else []
+        )
 
     def testImagesNoAlt(self):
         images = self.soup('img')
@@ -995,14 +957,11 @@ Therefore you will have better chances of delivering your phishing e-mail when y
             result += f'- Found {num} <img> tags without ALT="value" attribute.\n'
             result +=  '\t  Images without alternate text set in their attribute may increase Spam score\n'
 
-        if len(result) == 0:
-            return []
-
-        return {
-            'description' : desc,
-            'context' : context,
-            'analysis' : result
-        }
+        return (
+            {'description': desc, 'context': context, 'analysis': result}
+            if result
+            else []
+        )
 
     def testEmbeddedImages(self):
         images = self.soup('img')
@@ -1031,7 +990,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
 
                 if num < 5:
                     if len(alt) > 0:
-                        context += f'- ALT="{alt}": ' + PhishingMailParser.context(img) + '\n'
+                        context += f'- ALT="{alt}": {PhishingMailParser.context(img)}' + '\n'
                     else:
                         ctx = PhishingMailParser.context(img)
                         pos = ctx.find('data:')
@@ -1045,19 +1004,15 @@ Therefore you will have better chances of delivering your phishing e-mail when y
             result += f'- Found {logger.colored(num, "red")} <img> tags with embedded image ({logger.colored(embed, "yellow")}).\n'
             result +=  '\t  Embedded images increase Office365 SCL (Spam) level!\n'
 
-        if len(result) == 0:
-            return []
-
-        return {
-            'description' : desc,
-            'context' : context,
-            'analysis' : result
-        }
+        return (
+            {'description': desc, 'context': context, 'analysis': result}
+            if result
+            else []
+        )
 
     def testUnsupportedHtmlTags(self):
         tags = self.soup.find_all()
 
-        desc = f'Mail clients are using HTML rendering engines which might not support certain HTML tags (they strip them for security reasons).'
         context = ''
         result = ''
         num = 0
@@ -1091,6 +1046,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
         if len(result) == 0:
             return []
 
+        desc = 'Mail clients are using HTML rendering engines which might not support certain HTML tags (they strip them for security reasons).'
         return {
             'description' : desc,
             'context' : context,
@@ -1100,7 +1056,6 @@ Therefore you will have better chances of delivering your phishing e-mail when y
     def testUnsupportedHtmlAttribs(self):
         tags = self.soup.find_all()
 
-        desc = f'Mail clients are using HTML rendering engines which might not support certain HTML attributes on specific tags (they strip them for security reasons).'
         context = ''
         result = ''
         num = 0
@@ -1135,6 +1090,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
         if len(result) == 0:
             return []
 
+        desc = 'Mail clients are using HTML rendering engines which might not support certain HTML attributes on specific tags (they strip them for security reasons).'
         return {
             'description' : desc,
             'context' : context,
@@ -1144,10 +1100,7 @@ Therefore you will have better chances of delivering your phishing e-mail when y
 def printOutput(out):
     if options['format'] == 'text':
         width = 100
-        num = 0
-
-        for k, v in out.items():
-            num += 1
+        for num, (k, v) in enumerate(out.items(), start=1):
             analysis = v['analysis'].strip()
             context = v['context'].strip()
             desc = '\n'.join(textwrap.wrap(
@@ -1175,7 +1128,7 @@ def printOutput(out):
 
     {analysis}
 ''')
-            
+
     elif options['format'] == 'json':
         print(json.dumps(out))
 

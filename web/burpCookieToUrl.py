@@ -45,7 +45,7 @@ class BurpExtender(IBurpExtender, IHttpListener, IExtensionStateListener):
 
         url_parts = list(urlparse.urlparse(url))
         query = dict(urlparse.parse_qsl(url_parts[4]))
-        query.update({name : value})
+        query[name] = value
         url_parts[4] = urlencode(query)
 
         new_url = str(urlparse.urlunparse(url_parts))

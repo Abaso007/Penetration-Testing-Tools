@@ -42,8 +42,8 @@ class ICMP(ctypes.Structure):
         ('nexthop',     ctypes.c_ushort)
     ]
 
-    def __new__(self, sockBuff = None):
-        return self.from_buffer_copy(sockBuff)
+    def __new__(cls, sockBuff = None):
+        return cls.from_buffer_copy(sockBuff)
 
     def __init__(self, sockBuff = None):
         self.types_map = {
@@ -62,7 +62,7 @@ class ICMP(ctypes.Structure):
         try:
             self.message = self.types_map[self.type]
         except:
-            self.message = str('')
+            self.message = ''
 
 #
 # IPv4 packet structure definition in ctypes.
@@ -82,8 +82,8 @@ class IP(ctypes.Structure):
         ('dst',             ctypes.c_uint)
     ]
 
-    def __new__(self, socketBuffer = None):
-        return self.from_buffer_copy(socketBuffer)
+    def __new__(cls, socketBuffer = None):
+        return cls.from_buffer_copy(socketBuffer)
 
     def __init__(self, socketBuffer = None):
         # Map protocol constants to their names.
@@ -112,13 +112,15 @@ class IP(ctypes.Structure):
         try:
             self.src_address = socket.inet_ntoa(struct.pack('<L', self.src))
         except:
-            print('[!] Could not represent incoming packet\'s source address: {}'.format(self.src))
+            print(f"[!] Could not represent incoming packet\'s source address: {self.src}")
             self.src_address = '127.0.0.1'
 
         try:
             self.dst_address = socket.inet_ntoa(struct.pack('<L', self.dst))
         except:
-            print('[!] Could not represent incoming packet\'s destination address: {}'.format(self.dst))
+            print(
+                f"[!] Could not represent incoming packet\'s destination address: {self.dst}"
+            )
             self.dst_address = '127.0.0.1'
 
         # Human readable protocol
@@ -157,44 +159,44 @@ def processPackets(sniffer, subnet):
         packetNum = 0
 
         while True:
-            packetPrint = ''
             packetNum += 1
 
             packet = sniffer.recvfrom((1 << 16) - 1)[0]
 
             # Create an IP header from the first 20 bytes of the buffer.
-            ipHeader = IP(packet[0 : ctypes.sizeof(IP)])
+            ipHeader = IP(packet[:ctypes.sizeof(IP)])
 
             timeNow = datetime.now().strftime('%H:%M:%S.%f')[:-3]
 
-            # Print out the protocol that was detected and the hosts.
-            packetPrint += '[{:05} | {}] {} {} > {}'.format(
-                packetNum, timeNow, ipHeader.protocol, ipHeader.src_address, ipHeader.dst_address,
+            packetPrint = '' + '[{:05} | {}] {} {} > {}'.format(
+                packetNum,
+                timeNow,
+                ipHeader.protocol,
+                ipHeader.src_address,
+                ipHeader.dst_address,
             )
-
             if ipHeader.protocol == 'ICMP':
                 offset = ipHeader.ihl * 4
                 icmpBuf = packet[offset : offset + ctypes.sizeof(ICMP)]
                 icmpHeader = ICMP(icmpBuf)
 
-                packetPrint += ': ICMP Type: {} ({}), Code: {}\n'.format(
-                    icmpHeader.type, icmpHeader.message, icmpHeader.code
-                )
+                packetPrint += f': ICMP Type: {icmpHeader.type} ({icmpHeader.message}), Code: {icmpHeader.code}\n'
 
                 if DEBUG: 
                     packetPrint += hexdump(packet)
 
                 # Destination unreachable
-                if icmpHeader.code == 3 and icmpHeader.type == 3:
-                    if IPAddress(ipHeader.src_address) in IPNetwork(subnet):
+                if (
+                    icmpHeader.code == 3
+                    and icmpHeader.type == 3
+                    and IPAddress(ipHeader.src_address) in IPNetwork(subnet)
+                    and packet[-len(MAGIC_MESSAGE) :] == MAGIC_MESSAGE
+                ):
+                    host = ipHeader.src_address
+                    if host not in HOSTS_UP:
+                        print(f'[+] HOST IS UP: {host}')
+                        HOSTS_UP.add(host)
 
-                        # Make sure it contains our message
-                        if packet[- len(MAGIC_MESSAGE):] == MAGIC_MESSAGE:
-                            host = ipHeader.src_address
-                            if host not in HOSTS_UP:
-                                print('[+] HOST IS UP: {}'.format(host))
-                                HOSTS_UP.add(host)
-                
                 if DEBUG:
                     print(packetPrint)
 

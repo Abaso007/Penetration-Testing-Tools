@@ -60,7 +60,7 @@ CHUNK_SIZE = 512
 
 def generateRandomId():
     randomized = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(50))
-    return "xxx" + randomized + "yyy"
+    return f"xxx{randomized}yyy"
 
 # note that this decorator ignores **kwargs
 def memoize(obj):
@@ -75,7 +75,7 @@ def memoize(obj):
 
 def dbg(x):
     if 'debug' in config.keys() and config['debug']:
-        print('[dbg] ' + x)
+        print(f'[dbg] {x}')
 
 
 class SendRawHttpRequest:
@@ -96,14 +96,14 @@ class SendRawHttpRequest:
             else:
                 self.sock = sock
 
-            self.sock.settimeout(timeout)                
+            self.sock.settimeout(timeout)
             self.sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
             self.sock.connect((host, port))
-            dbg('Connected with {}'.format(host))
+            dbg(f'Connected with {host}')
             return True
 
         except Exception as e:
-            ctx.log.error('[!] Could not connect with {}:{}!'.format(host, port))
+            ctx.log.error(f'[!] Could not connect with {host}:{port}!')
             if config['debug']:
                 raise
             return False
@@ -164,9 +164,9 @@ class PyCollaboratorMitmproxyAddon:
     def createConnection(self):
         self.databaseInstance = Database()
 
-        ctx.log.info("Connecting to MySQL database: {}@{} ...".format(
-            config['mysql-user'], config['mysql-host']
-        ))
+        ctx.log.info(
+            f"Connecting to MySQL database: {config['mysql-user']}@{config['mysql-host']} ..."
+        )
         self.connection = self.databaseInstance.connection(  config['mysql-host'], 
                                                         config['mysql-user'], 
                                                         config['mysql-pass'],
@@ -174,7 +174,7 @@ class PyCollaboratorMitmproxyAddon:
 
         if not self.connection:
             ctx.log.error('Could not connect to the MySQL database! ' \
-                'Please configure inner `MySQL` variables such as Host, User, Password.')
+                    'Please configure inner `MySQL` variables such as Host, User, Password.')
             sys.exit(1)
 
         ctx.log.info('Connected.')
@@ -183,20 +183,17 @@ class PyCollaboratorMitmproxyAddon:
         try:
             assert self.connection
             database_lock.acquire()
-            if not params:
-                out = self.databaseInstance.query(query)
-            else:
-                out = self.databaseInstance.query(query, params = params)
-
+            out = (
+                self.databaseInstance.query(query, params=params)
+                if params
+                else self.databaseInstance.query(query)
+            )
             database_lock.release()
-            if not out:
-                return []
-            return out
-
+            return out if out else []
         except Exception as e:
-            ctx.log.error('SQL query ("{}", params: {}) has failed: {}'.format(
-                query, str(params), str(e)
-            ))
+            ctx.log.error(
+                f'SQL query ("{query}", params: {str(params)}) has failed: {str(e)}'
+            )
             database_lock.release()
             if config['debug']:
                 raise
@@ -205,15 +202,14 @@ class PyCollaboratorMitmproxyAddon:
     @staticmethod
     @memoize
     def requestToString(request):
-        headers = '\r\n'.join(['{}: {}'.format(k, v) for k, v in request.headers.items()])
-        out = '{} {} {}\r\n{}'.format(request.command, request.path, request.request_version, headers)
-        return out
+        headers = '\r\n'.join([f'{k}: {v}' for k, v in request.headers.items()])
+        return f'{request.command} {request.path} {request.request_version}\r\n{headers}'
 
     @staticmethod
     def getPingbackUrl(request):
         #guid = str(uuid.uuid4())
         guid = generateRandomId()
-        url = "http://{}.{}/".format(guid, config['pingback-host'])
+        url = f"http://{guid}.{config['pingback-host']}/"
         return (url, guid)
 
     def saveRequestForCorrelation(self, request, pingback, uuid, where):
@@ -231,44 +227,73 @@ class PyCollaboratorMitmproxyAddon:
 
     def hostOverriding(self):
         (pingback, uuid) = PyCollaboratorMitmproxyAddon.getPingbackUrl(self.request)
-        requestData = 'GET {} HTTP/1.1\r\n'.format(pingback)
-        requestData+= 'Host: {}\r\n'.format(self.request.headers['Host'])
+        requestData = (
+            f'GET {pingback} HTTP/1.1\r\n'
+            + f"Host: {self.request.headers['Host']}\r\n"
+        )
         requestData+= 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36\r\n'
         requestData+= 'Accept: */*\r\n'
         requestData+= 'Connection: close\r\n'
 
-        self.saveRequestForCorrelation(self.request, pingback, uuid, 'Overridden Host header ({} -> GET {} )'.format(self.request.headers['Host'], pingback))
+        self.saveRequestForCorrelation(
+            self.request,
+            pingback,
+            uuid,
+            f"Overridden Host header ({self.request.headers['Host']} -> GET {pingback} )",
+        )
         PyCollaboratorMitmproxyAddon.sendRawRequest(self.request, requestData)
-        ctx.log.info('(2) Re-sent host overriding request ({} -> {})'.format(self.request.path, pingback))
+        ctx.log.info(
+            f'(2) Re-sent host overriding request ({self.request.path} -> {pingback})'
+        )
 
     def hostAtManipulation(self):
         (pingback, uuid) = PyCollaboratorMitmproxyAddon.getPingbackUrl(self.request)
-        url = urljoin(self.request.scheme + '://', self.request.headers['Host'], self.request.path)
+        url = urljoin(
+            f'{self.request.scheme}://',
+            self.request.headers['Host'],
+            self.request.path,
+        )
         parsed = urlparse(pingback)
 
-        requestData = 'GET {} HTTP/1.1\r\n'.format(pingback)
-        requestData+= 'Host: {}@{}\r\n'.format(self.request.headers['Host'], parsed.netloc)
+        requestData = (
+            f'GET {pingback} HTTP/1.1\r\n'
+            + f"Host: {self.request.headers['Host']}@{parsed.netloc}\r\n"
+        )
         requestData+= 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36\r\n'
         requestData+= 'Accept: */*\r\n'
         requestData+= 'Connection: close\r\n'
 
-        self.saveRequestForCorrelation(self.request, pingback, uuid, 'Host header manipulation ({} -> {}@{})'.format(self.request.headers['Host'], self.request.headers['Host'], parsed.netloc))
+        self.saveRequestForCorrelation(
+            self.request,
+            pingback,
+            uuid,
+            f"Host header manipulation ({self.request.headers['Host']} -> {self.request.headers['Host']}@{parsed.netloc})",
+        )
         PyCollaboratorMitmproxyAddon.sendRawRequest(self.request, requestData)
-        ctx.log.info('(3) Re-sent host header @ manipulated request ({} -> {}@{})'.format(self.request.headers['Host'], self.request.headers['Host'], parsed.netloc))
+        ctx.log.info(
+            f"(3) Re-sent host header @ manipulated request ({self.request.headers['Host']} -> {self.request.headers['Host']}@{parsed.netloc})"
+        )
 
     def sendMisroutedRequests(self):
         (pingback, uuid) = PyCollaboratorMitmproxyAddon.getPingbackUrl(self.request)
         url = self.request.url
         parsed = urlparse(pingback)
 
-        self.saveRequestForCorrelation(self.request, pingback, uuid, 'Hijacked Host header ({} -> {})'.format(self.request.headers['Host'], parsed.netloc))
+        self.saveRequestForCorrelation(
+            self.request,
+            pingback,
+            uuid,
+            f"Hijacked Host header ({self.request.headers['Host']} -> {parsed.netloc})",
+        )
 
         try:
-            dbg('GET {}'.format(url))
+            dbg(f'GET {url}')
             requests.get(url, headers = {'Host' : parsed.netloc})
-            ctx.log.info('(1) Re-sent misrouted request with hijacked Host header ({} -> {})'.format(self.request.headers['Host'], parsed.netloc))
+            ctx.log.info(
+                f"(1) Re-sent misrouted request with hijacked Host header ({self.request.headers['Host']} -> {parsed.netloc})"
+            )
         except (Exception, requests.exceptions.TooManyRedirects) as e:
-            ctx.log.error('Could not issue request to ({}): {}'.format(url, str(e)))
+            ctx.log.error(f'Could not issue request to ({url}): {str(e)}')
             if config['debug']:
                 raise
 
@@ -277,16 +302,16 @@ class PyCollaboratorMitmproxyAddon:
 
     @memoize
     def checkIfAlreadyManipulated(self, host):
-        query = 'SELECT desthost FROM {}.requests WHERE desthost = "{}"'.format(config['mysql-database'], host)
+        query = f"""SELECT desthost FROM {config['mysql-database']}.requests WHERE desthost = "{host}\""""
 
         rows = self.executeSql(query)
         if rows == False: return rows
         for row in rows:
             if self.request.headers['Host'] in row['desthost']:
-                dbg('Host ({}) already was lured for pingback.'.format(row['desthost']))
+                dbg(f"Host ({row['desthost']}) already was lured for pingback.")
                 return True
-        
-        dbg('Host ({}) was not yet lured for pingback.'.format(self.request.headers['Host']))
+
+        dbg(f"Host ({self.request.headers['Host']}) was not yet lured for pingback.")
         return False
 
     def request_handler(self, req, req_body):
@@ -308,16 +333,19 @@ class PyCollaboratorMitmproxyAddon:
                 (pingback, uuid) = PyCollaboratorMitmproxyAddon.getPingbackUrl(self.request)
                 self.request.headers[header] = pingback
                 if 'IP' in header:
-                    self.request.headers[header] = '{}.{}'.format(uuid, config['pingback-host'])
+                    self.request.headers[header] = f"{uuid}.{config['pingback-host']}"
 
-                self.saveRequestForCorrelation(pingback, header, uuid, 'Header: {}'.format(header))
+                self.saveRequestForCorrelation(pingback, header, uuid, f'Header: {header}')
 
             self.sendMisroutedRequests()
-            ctx.log.info('Injected pingbacks for host ({}).'.format(host))
+            ctx.log.info(f'Injected pingbacks for host ({host}).')
 
         return self.requestBody
 
     def requestForMitmproxy(self, flow):
+
+
+
         class Request:
             def __init__(self, flow):
                 self.scheme = flow.request.scheme
@@ -328,24 +356,23 @@ class PyCollaboratorMitmproxyAddon:
                 self.port = int(flow.request.port)
                 self.http_version = flow.request.http_version
                 self.request_version = flow.request.http_version
-                self.headers = {}
                 self.req_body = flow.request.content
                 self.url = flow.request.url
 
-                self.headers['Host'] = self.host
-
+                self.headers = {'Host': self.host}
                 for k,v in flow.request.headers.items():
                     self.headers[k] = v
 
             def __str__(self):
-                out = '{} {} {}\r\n'.format(self.method, self.path, self.http_version)
+                out = f'{self.method} {self.path} {self.http_version}\r\n'
                 for k, v in self.headers.items():
-                    out += '{}: {}\r\n'.format(k, v)
+                    out += f'{k}: {v}\r\n'
 
                 if self.req_body:
-                    out += '\r\n{}'.format(self.req_body)
+                    out += f'\r\n{self.req_body}'
 
                 return out + '\r\n'
+
 
         req = Request(flow)
         req_body = req.req_body

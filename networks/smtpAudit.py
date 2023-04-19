@@ -245,18 +245,14 @@ class colors:
 # Output routines.
 #
 def _out(x, toOutLine = False, col = colors.reset): 
-    if config['colors']:
-        text = '{}{}{}\n'.format(
-            col, x, colors.reset
-        )
-    else:
-        text = x + '\n'
+    text = f'{col}{x}{colors.reset}\n' if config['colors'] else x + '\n'
+    if config['debug']: 
+        caller = (inspect.getouterframes(inspect.currentframe(), 2))[2][3]
+        if x.startswith('['):
+            x = f'{x[:4]}  {caller}(): {x[4:]}'
+        sys.stderr.write(text)
 
-    if config['debug'] or config['verbose']: 
-        if config['debug']:
-            caller = (inspect.getouterframes(inspect.currentframe(), 2))[2][3]
-            if x.startswith('['):
-                x = x[:4] + '  ' + caller + '(): ' + x[4:]
+    elif config['verbose']: 
         sys.stderr.write(text)
 
     elif config['format'] == 'text' and \
@@ -270,16 +266,22 @@ def dbg(x):
     if config['debug']: 
         caller2 = (inspect.getouterframes(inspect.currentframe(), 2))[1][3]
         caller1 = (inspect.getouterframes(inspect.currentframe(), 2))[2][3]
-        caller = '{}() -> {}'.format(caller1, caller2)
+        caller = f'{caller1}() -> {caller2}'
         text = x
-        if config['colors']: text = '{}{}{}'.format(colors.fg.lightblue, x, colors.reset)
-        sys.stderr.write('[dbg] ' + caller + '(): ' + text + '\n')
+        if config['colors']:
+            text = f'{colors.fg.lightblue}{x}{colors.reset}'
+        sys.stderr.write(f'[dbg] {caller}(): {text}' + '\n')
 
-def out(x, toOutLine = False): _out('[.] ' + x, toOutLine)
-def info(x, toOutLine = False):_out('[?] ' + x, toOutLine, colors.fg.yellow)
-def err(x, toOutLine = False): _out('[!] ' + x, toOutLine, colors.bg.red + colors.fg.black)
-def fail(x, toOutLine = False):_out('[-] ' + x, toOutLine, colors.fg.red + colors.bold)
-def ok(x, toOutLine = False):  _out('[+] ' + x, toOutLine, colors.fg.green + colors.bold)
+def out(x, toOutLine = False):
+    _out(f'[.] {x}', toOutLine)
+def info(x, toOutLine = False):
+    _out(f'[?] {x}', toOutLine, colors.fg.yellow)
+def err(x, toOutLine = False):
+    _out(f'[!] {x}', toOutLine, colors.bg.red + colors.fg.black)
+def fail(x, toOutLine = False):
+    _out(f'[-] {x}', toOutLine, colors.fg.red + colors.bold)
+def ok(x, toOutLine = False):
+    _out(f'[+] {x}', toOutLine, colors.fg.green + colors.bold)
 
 
 class BannerParser:
@@ -384,12 +386,7 @@ class BannerParser:
         probs = [float(c) / len(data) for c in counts.values()]
         probs = [p for p in probs if p > 0.]
 
-        ent = 0
-        for p in probs:
-            if p > 0.:
-                ent -= p * math.log(p, base[unit])
-
-        return ent
+        return 0 - sum(p * math.log(p, base[unit]) for p in probs if p > 0.)
 
     @staticmethod
     def removeTimestamp(banner):
@@ -408,9 +405,7 @@ class BannerParser:
 
         for service, wellKnownBanner in BannerParser.wellKnownDefaultBanners.items():
             if wellKnownBanner.lower() in banner.lower():
-                fail('UNSECURE: Default banner found for {}: "{}"'.format(
-                    service, banner
-                ))
+                fail(f'UNSECURE: Default banner found for {service}: "{banner}"')
             return False
 
         penalty += self.analyseBannerEntropy(banner)
@@ -419,18 +414,18 @@ class BannerParser:
 
         ret = (penalty < BannerParser.maxPenaltyScore)
         if not ret:
-            fail('UNSECURE: Banner considered revealing sensitive informations (penalty: {}/{})!'.format(
-                penalty, BannerParser.maxPenaltyScore
-            ))
-            _out('\tBanner: ("{}")'.format(banner), toOutLine = True)
-            
+            fail(
+                f'UNSECURE: Banner considered revealing sensitive informations (penalty: {penalty}/{BannerParser.maxPenaltyScore})!'
+            )
+            _out(f'\tBanner: ("{banner}")', toOutLine = True)
+
             return self.results
         else:
-            ok('SECURE: Banner was not found leaking anything. (penalty: {}/{})'.format(
-                penalty, BannerParser.maxPenaltyScore
-            ))
-            _out('\tBanner: ("{}")'.format(banner), toOutLine = True)
-            
+            ok(
+                f'SECURE: Banner was not found leaking anything. (penalty: {penalty}/{BannerParser.maxPenaltyScore})'
+            )
+            _out(f'\tBanner: ("{banner}")', toOutLine = True)
+
             if all(self.results.values()) and not config['always_unfolded_results']:
                 return True
             else:
@@ -441,17 +436,17 @@ class BannerParser:
         reducedBanner = BannerParser.removeTimestamp(banner)
         bannerEntropy = BannerParser.entropy(reducedBanner)
 
-        dbg('Analysing banner: "{}"'.format(banner))
+        dbg(f'Analysing banner: "{banner}"')
         dbg('Length: {}, reduced banner Entropy: {:.6f}'.format(len(banner), bannerEntropy))
 
         if len(reducedBanner) > (BannerParser.lengthCharacteristics['mean'] \
-            + 1 * BannerParser.lengthCharacteristics['std.dev']):
+                + 1 * BannerParser.lengthCharacteristics['std.dev']):
             info('Warning: Banner seems to be very long. Consider shortening it.', toOutLine = True)
             self.results['is-not-long-or-complex'] = False
             penalty += 1
 
         if bannerEntropy > (BannerParser.reducedEntropyCharacteristics['mean'] \
-            + 1 * BannerParser.reducedEntropyCharacteristics['std.dev']):
+                + 1 * BannerParser.reducedEntropyCharacteristics['std.dev']):
             info('Warning: Banner seems to be complex in terms of entropy.'
                     ' Consider generalising it.', toOutLine = True)
             self.results['is-not-long-or-complex'] = False
@@ -463,23 +458,21 @@ class BannerParser:
         penalty = 0
         versionFound = ''
         regexVersionNumber = r'(?:(\d+)\.)?(?:(\d+)\.)?(?:(\d+)\.\d+)'
-        
-        match = re.search(regexVersionNumber, banner)
-        if match:
-            versionFound = match.group(0)
-            fail('Sensitive software version number found in banner: "{}"'.format(
-                versionFound
-            ), toOutLine = True)
+
+        if match := re.search(regexVersionNumber, banner):
+            versionFound = match[0]
+            fail(
+                f'Sensitive software version number found in banner: "{versionFound}"',
+                toOutLine=True,
+            )
             self.results['not-contains-version'] = False
             penalty += BannerParser.weights['versionFound']
-        
+
         alreadyFound = set()
         for word in BannerParser.prohibitedWords:
             if word.lower() in banner.lower():
-                if not word.lower() in alreadyFound:
-                    info('Prohibited word found in banner: "{}"'.format(
-                        word
-                    ), toOutLine = True)
+                if word.lower() not in alreadyFound:
+                    info(f'Prohibited word found in banner: "{word}"', toOutLine = True)
                     self.results['not-contains-prohibited-words'] = True
                     alreadyFound.add(word.lower())
 
@@ -494,19 +487,19 @@ class BannerParser:
                 # Does the word immediately follow or precede version number?
                 if versionFound:
                     surrounds = (
-                        '{}{}'.format(word, versionFound),
-                        '{}{}'.format(versionFound, word),
-                        '{} {}'.format(word, versionFound),
-                        '{} {}'.format(versionFound, word),
-                        '{}/{}'.format(word, versionFound),
-                        '{}/{}'.format(versionFound, word),
+                        f'{word}{versionFound}',
+                        f'{versionFound}{word}',
+                        f'{word} {versionFound}',
+                        f'{versionFound} {word}',
+                        f'{word}/{versionFound}',
+                        f'{versionFound}/{word}',
                     )
                     for surr in surrounds:
                         if surr in banner:
-                            info('Word was found lying around version: "{}". '\
-                                'Consider removing it.'.format(
-                                surr
-                            ), toOutLine = True)
+                            info(
+                                f'Word was found lying around version: "{surr}". Consider removing it.',
+                                toOutLine=True,
+                            )
                             penalty += BannerParser.weights['versionNearProhibitedWord']
                             break
 
@@ -514,12 +507,10 @@ class BannerParser:
 
     def checkHostnameInBanner(self, banner):
         penalty = 0
-        matched = re.search(BannerParser.localHostnameRegex, banner)
-
-        if matched:
-            localHostname = matched.group(1)
+        if matched := re.search(BannerParser.localHostnameRegex, banner):
+            localHostname = matched[1]
             self.results['contains-hostname'] = True
-            info('Extracted hostname from banner: "{}"'.format(localHostname))
+            info(f'Extracted hostname from banner: "{localHostname}"')
         else:
             fail('SMTP Banner does not contain server\'s hostname. This may cause SPAM reports.', toOutLine = True)
             penalty = 1
@@ -555,32 +546,26 @@ class DmarcParser:
             if k == 'v':
                 self.results['dmarc-version'] = v.lower() == 'dmarc1'
                 if not self.results['dmarc-version']:
-                    fail('UNSECURE: Unknown version of DMARC stated: {}'.format(v))
+                    fail(f'UNSECURE: Unknown version of DMARC stated: {v}')
 
             elif k == 'p':
                 if v.lower() not in ('none', 'reject', 'quarantine'):
-                    fail('UNSECURE: Unknown policy stated: {}'.format(v))
+                    fail(f'UNSECURE: Unknown policy stated: {v}')
                     self.results['policy-rejects-by-default'] = False
                 else:
                     self.results['policy-rejects-by-default'] = v.lower() == 'reject'
 
                     if not self.results['policy-rejects-by-default']:
-                        fail('UNSECURE: DMARC policy does not reject unverified messages ({}).'.format(
-                            v
-                        ))
+                        fail(f'UNSECURE: DMARC policy does not reject unverified messages ({v}).')
             elif k == 'pct':
                 try:
                     perc = int(v)
                     self.results['number-of-messages-filtered'] = perc >= 20
 
                     if self.results['number-of-messages-filtered']:
-                        info('Percentage of filtered messages is satisfiable ({})'.format(
-                            perc
-                        ))
+                        info(f'Percentage of filtered messages is satisfiable ({perc})')
                     else:
-                        fail('UNSECURE: Unsatisfiable percentage of messages filtered: {}!'.format(
-                            perc
-                        ))
+                        fail(f'UNSECURE: Unsatisfiable percentage of messages filtered: {perc}!')
 
                 except ValueError:
                     fail('Defined "pct" is not a valid percentage!')
@@ -624,19 +609,18 @@ class DkimParser:
             fail('Incorrect Public Key in DKIM!')
             keyLen = 0
 
-        dbg('DKIM: version = {}, algorithm = {}, key length = {}'.format(
-            dkim['v'], dkim['k'], keyLen
-        ))
+        dbg(
+            f"DKIM: version = {dkim['v']}, algorithm = {dkim['k']}, key length = {keyLen}"
+        )
 
         if keyLen < DkimParser.minimumDkimKeyLength:
-            fail('UNSECURE: DKIM Public Key length is insufficient: {}. ' \
-                'Recommended at least {}'.format(
-                keyLen, DkimParser.minimumDkimKeyLength
-            ))
+            fail(
+                f'UNSECURE: DKIM Public Key length is insufficient: {keyLen}. Recommended at least {DkimParser.minimumDkimKeyLength}'
+            )
 
             self.results['public-key-length'] = False
         else:
-            ok('SECURE: DKIM Public key is of sufficient length: {}'.format(keyLen))
+            ok(f'SECURE: DKIM Public key is of sufficient length: {keyLen}')
             self.results['public-key-length'] = True
 
         return self.results['public-key-length']
@@ -670,22 +654,20 @@ class SpfParser:
         record = record.lower()
         tokens = record.split(' ')
 
-        dbg('Processing SPF record: "{}"'.format(record))
+        dbg(f'Processing SPF record: "{record}"')
 
         for token in tokens:
             qualifier = ''
             if not token: continue
 
-            dbg('SPF token: {}'.format(token))
+            dbg(f'SPF token: {token}')
 
             if token.startswith('v=spf'):
                 self.results['spf-version'] = self.processVersion(token)
                 continue
 
             if token[0] not in string.ascii_letters and token[0] not in SpfParser.qualifiers:
-                fail('SPF record contains unknown qualifier: "{}". Ignoring it...'.format(
-                    token[0]
-                ))
+                fail(f'SPF record contains unknown qualifier: "{token[0]}". Ignoring it...')
 
                 qualifier = token[0]
                 token = token[1:]
@@ -694,32 +676,32 @@ class SpfParser:
 
             if 'all' in token:
                 self.results['all-mechanism-correctly-used'] = \
-                self.processAllMechanism(token, record, qualifier)
+                    self.processAllMechanism(token, record, qualifier)
                 continue
 
-            if len(list(filter(lambda x: token.startswith(x), SpfParser.mechanisms))) >= 1:
+            if list(filter(lambda x: token.startswith(x), SpfParser.mechanisms)):
                 self.processMechanism(record, token, qualifier)
 
         if not self.results['allowed-hosts-list']:
             #maxAllowed = 2 ** (32 - SpfParser.maxAllowedNetworkMask)
             maxAllowed = config['spf_maximum_hosts']
 
-            fail('UNSECURE: SPF record allows more than {} max allowed hosts: {} in total.'.format(
-                    maxAllowed, self.allowedHostsNumber
-            ))
-            _out('\tRecord: ("{}")'.format(record))
+            fail(
+                f'UNSECURE: SPF record allows more than {maxAllowed} max allowed hosts: {self.allowedHostsNumber} in total.'
+            )
+            _out(f'\tRecord: ("{record}")')
 
         if not self.results['allowed-hosts-list']:
-            fail('There are too many allowed domains/CIDR ranges specified in SPF record: {}.'.format(
-                self.allowSpecifiers
-            ))
+            fail(
+                f'There are too many allowed domains/CIDR ranges specified in SPF record: {self.allowSpecifiers}.'
+            )
 
         if not config['always_unfolded_results'] and all(self.results.values()):
             dbg('All tests passed.')
             return True
         else:
             if not all(self.results.values()):
-                dbg('Not all tests passed.: {}'.format(self.results))
+                dbg(f'Not all tests passed.: {self.results}')
             else:
                 dbg('All tests passed.')
 
@@ -751,7 +733,7 @@ class SpfParser:
             if token in SpfParser.mechanisms:
                 otherMechanisms += 1
 
-        dbg('Found {} other mechanisms than "{}"'.format(otherMechanisms, mechanism))
+        dbg(f'Found {otherMechanisms} other mechanisms than "{mechanism}"')
         return (otherMechanisms > 0)
 
     def processVersion(self, token):
@@ -759,7 +741,7 @@ class SpfParser:
         validVersions = ('1')
 
         for version in validVersions:
-            if 'spf{}'.format(version) == ver:
+            if f'spf{version}' == ver:
                 dbg('SPF version was found valid.')
                 return True
 
@@ -768,26 +750,30 @@ class SpfParser:
 
     def processAllMechanism(self, token, record, qualifier):
         if not record.endswith(token):
-            fail('SPF Record wrongly stated - "{}" mechanism must be placed at the end!'.format(
-                token
-            ))
+            fail(
+                f'SPF Record wrongly stated - "{token}" mechanism must be placed at the end!'
+            )
             return False
 
         if token == 'all' and qualifier == '+':
-            fail('UNSECURE: SPF too permissive: "The domain owner thinks that SPF is useless and/or doesn\'t care.": "{}"'.format(record))
+            fail(
+                f"""UNSECURE: SPF too permissive: "The domain owner thinks that SPF is useless and/or doesn\'t care.": "{record}\""""
+            )
             return False
 
         if not self.areThereAnyOtherMechanismsThan('all', record):
-            fail('SPF "all" mechanism is too restrictive: "The domain sends no mail at all.": "{}"'.format(record), toOutLine = True)
+            fail(
+                f'SPF "all" mechanism is too restrictive: "The domain sends no mail at all.": "{record}"',
+                toOutLine=True,
+            )
             return False
 
         return True
 
     def getNetworkSize(self, net):
-        dbg('Getting network size out of: {}'.format(net))
-        m = re.match(r'[\w\.-:]+\/(\d{1,2})', net)
-        if m:
-            mask = int(m.group(1))
+        dbg(f'Getting network size out of: {net}')
+        if m := re.match(r'[\w\.-:]+\/(\d{1,2})', net):
+            mask = int(m[1])
             return 2 ** (32 - mask)
 
         # Assuming any other value is a one host.
@@ -799,17 +785,15 @@ class SpfParser:
         numOfAddrBasedMechanisms = len(list(filter(lambda x: token.startswith(x), 
             addressBasedMechanisms)))
 
-        # Processing address-based mechanisms.
         if numOfAddrBasedMechanisms >= 1:
             if self.addressBasedMechanism >= SpfParser.maxNumberOfDomainsAllowed:
                 self.results['allowed-hosts-list'] = False
                 self.allowSpecifiers += 1
+            elif qualifier == '+':
+                self.addressBasedMechanism += 1
+                self.checkTooManyAllowedHosts(token, record, qualifier)
             else:
-                if qualifier == '+':
-                    self.addressBasedMechanism += 1
-                    self.checkTooManyAllowedHosts(token, record, qualifier)
-                else:
-                    dbg('Mechanism: "{}" not being passed.'.format(token))
+                dbg(f'Mechanism: "{token}" not being passed.')
 
 
     def checkTooManyAllowedHosts(self, token, record, qualifier):
@@ -820,19 +804,17 @@ class SpfParser:
 
         if ':' in token:
             tok, val = token.split(':')
-        elif '/' in token and not ':' in token:
+        elif '/' in token:
             tok, val = token.split('/')
-            val = '0/{}'.format(val)
+            val = f'0/{val}'
         elif token in SpfParser.mechanisms:
             tok = token
             val = '0/32'
         else:
-            err('Invalid address-based mechanism: {}!'.format(token))
+            err(f'Invalid address-based mechanism: {token}!')
             return
 
-        dbg('Processing SPF mechanism: "{}" with value: "{}"'.format(
-            tok, val
-        ))
+        dbg(f'Processing SPF mechanism: "{tok}" with value: "{val}"')
 
         size = self.getNetworkSize(val)
         #maxAllowed = 2 ** (32 - SpfParser.maxAllowedNetworkMask)
@@ -841,9 +823,7 @@ class SpfParser:
         self.allowedHostsNumber += size
         if size > maxAllowed:
             self.results['minimum-allowed-hosts-list'] = False
-            fail('UNSECURE: Too many hosts allowed in directive: {} - total: {}'.format(
-                token, size
-            ))
+            fail(f'UNSECURE: Too many hosts allowed in directive: {token} - total: {size}')
 
 
 class SmtpTester:
@@ -953,7 +933,7 @@ class SmtpTester:
         self.remoteHostname = self.localHostname = self.domain = self.resolvedIPAddress = ''
         self.port = port
         self.mailDomain = mailDomain
-        self.ssl = None if not forceSSL else True
+        self.ssl = True if forceSSL else None
         self.forceSSL = forceSSL
         self.server = None
         self.starttlsFailures = 0
@@ -978,7 +958,7 @@ class SmtpTester:
             return
 
         assert config['dns_full'] in ('always', 'on-ip', 'never'), \
-            "config['dns_full'] wrongly stated."
+                "config['dns_full'] wrongly stated."
 
         if re.match(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}', hostname) and not mailDomain:
             spf = SmtpTester.checkIfTestToRun('spf')
@@ -990,13 +970,12 @@ class SmtpTester:
                 out('You may want to specify \'--domain\' and repeat those tests for greater confidence.', toOutLine = True)
 
             self.resolvedIPAddress = hostname
-        
-        needsConnection = False
-        for test in SmtpTester.testsConducted.keys():
-            if self.checkIfTestToRun(test) and test not in SmtpTester.connectionLessTests:
-                needsConnection = True
-                break
 
+        needsConnection = any(
+            self.checkIfTestToRun(test)
+            and test not in SmtpTester.connectionLessTests
+            for test in SmtpTester.testsConducted.keys()
+        )
         try:
             if needsConnection and connect and not self.connect():
                 sys.exit(-1)
@@ -1027,9 +1006,7 @@ class SmtpTester:
                 try:
                     resolved = socket.gethostbyaddr(self.hostname)
                     self.remoteHostname = repr(resolved[0]).replace("'", '')
-                    info('Resolved DNS (A) name: "{}"'.format(
-                        self.remoteHostname
-                    ))
+                    info(f'Resolved DNS (A) name: "{self.remoteHostname}"')
 
                 except socket.herror as e:
                     dbg('IP address could not be resolved into hostname.')
@@ -1037,9 +1014,7 @@ class SmtpTester:
             else:
                 try:
                     resolved = socket.gethostbyname(self.hostname)
-                    info('Resolved IP address / PTR: "{}"'.format(
-                        resolved
-                    ))
+                    info(f'Resolved IP address / PTR: "{resolved}"')
                     self.resolvedIPAddress = resolved
                 except socket.herror as e:
                     dbg('DNS name could not be resolved into IP address.')
@@ -1048,10 +1023,8 @@ class SmtpTester:
             if self.banner:
                 matched = re.search(BannerParser.localHostnameRegex, self.banner)
                 if matched:
-                    self.localHostname = matched.group(1)
-                    info('SMTP banner revealed server name: "{}".'.format(
-                        self.localHostname
-                    ))
+                    self.localHostname = matched[1]
+                    info(f'SMTP banner revealed server name: "{self.localHostname}".')
 
             if resolutionFailed and not matched:
                 fail("Could not obtain server's hostname from neither IP nor banner!")
@@ -1059,7 +1032,7 @@ class SmtpTester:
             elif not resolutionFailed and not matched:
                 info("Resolved IP but could not obtain server's hostname from the banner.")
                 return True
-            elif resolutionFailed and matched:
+            elif resolutionFailed:
                 info("It was possible to obtain server's hostname from the banner but not to resolve IP address.")
                 return True
 
@@ -1117,13 +1090,15 @@ class SmtpTester:
             return [self.mailDomain,]
 
         domainsToReview = [self.originalHostname]
-        doFullReview = False
         ipRex = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
 
-        if config['dns_full'] == 'always' or \
-            (config['dns_full'] == 'on-ip' and re.match(ipRex, self.originalHostname)):
-            doFullReview = True
-
+        doFullReview = bool(
+            config['dns_full'] == 'always'
+            or (
+                config['dns_full'] == 'on-ip'
+                and re.match(ipRex, self.originalHostname)
+            )
+        )
         if doFullReview:
             domainsToReview = list(filter(
                 lambda x: not re.match(ipRex, x),
@@ -1159,18 +1134,18 @@ class SmtpTester:
 
         self.disconnect()
 
-        if self.port == None:
+        if self.port is None:
             ret = self.tryToConnectOnDifferentPorts(quiet)
         else:
             ret = self.reconnect(quiet)
-        
+
         if noBannerPreviously and self.banner:
-            _out('SMTP banner: "{}"'.format(self.banner), True, colors.fg.pink)
+            _out(f'SMTP banner: "{self.banner}"', True, colors.fg.pink)
 
         if ret and sayHello:
             dbg('Saying HELO/EHLO to the server...')
-            out = self.sendcmd('EHLO ' + SmtpTester.pretendLocalHostname)
-            dbg('Server responded to HELO/EHLO with: {}'.format(out))
+            out = self.sendcmd(f'EHLO {SmtpTester.pretendLocalHostname}')
+            dbg(f'Server responded to HELO/EHLO with: {out}')
 
             if out[0]:
                 self.parseHelpOutputAndUpdateServicesList(out[1].decode())

@@ -59,11 +59,8 @@ class ReEncoder:
 
             for d in data:
                 c = ord(d)
-                if c in (10, 13): 
+                if c in {10, 13} or c >= 0x20 and c <= 0x7F: 
                     nonBinary += 1
-                elif c >= 0x20 and c <= 0x7f:
-                    nonBinary += 1
-
             binary = len(data) - nonBinary
             return binary >= int(percOfBinaryToAssume * len(data))
 
@@ -89,9 +86,7 @@ class ReEncoder:
             return 'None'
 
         def check(self, data):
-            if not data:
-                return False
-            return True
+            return bool(data)
             
         def encode(self, data):
             return data
@@ -107,10 +102,7 @@ class ReEncoder:
             if urllib.quote(urllib.unquote(data)) == data and (urllib.unquote(data) != data):
                 return True
 
-            if re.search(r'(?:%[0-9a-f]{2})+', data, re.I):
-                return True
-
-            return False
+            return bool(re.search(r'(?:%[0-9a-f]{2})+', data, re.I))
             
         def encode(self, data):
             return urllib.quote(data)
@@ -123,10 +115,7 @@ class ReEncoder:
             return 'HexEncoded'
 
         def check(self, data):
-            m = re.match(r'^[0-9a-f]+$', data, re.I)
-            if m:
-                return True
-            return False
+            return bool(m := re.match(r'^[0-9a-f]+$', data, re.I))
             
         def encode(self, data):
             return binascii.hexlify(data).strip()
@@ -141,10 +130,13 @@ class ReEncoder:
         def check(self, data):
             try:
                 if base64.b64encode(base64.b64decode(data)) == data:
-                    m = re.match('^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=|[A-Za-z0-9+\/]{4})$', data, re.I)
-                    if m: 
-                        return True
-                    return False
+                    return bool(
+                        m := re.match(
+                            '^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=|[A-Za-z0-9+\/]{4})$',
+                            data,
+                            re.I,
+                        )
+                    )
             except:
                 pass
             return False
@@ -162,10 +154,13 @@ class ReEncoder:
         def check(self, data):
             try:
                 if base64.urlsafe_b64encode(base64.urlsafe_b64decode(data)) == data:
-                    m = re.match('^(?:[A-Za-z0-9\-_]{4})*(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=|[A-Za-z0-9\-_]{4})$', data, re.I)
-                    if m: 
-                        return True
-                    return False
+                    return bool(
+                        m := re.match(
+                            '^(?:[A-Za-z0-9\-_]{4})*(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=|[A-Za-z0-9\-_]{4})$',
+                            data,
+                            re.I,
+                        )
+                    )
             except:
                 pass
             return False
@@ -252,7 +247,7 @@ class ReEncoder:
     def verifyEncodings(self, encodings):
         for encoder in encodings:
             if type(encoder) == str:
-                if not encoder in self.encodersMap.keys():
+                if encoder not in self.encodersMap.keys():
                     raise Exception("Passed unknown encoder's name.")
             elif not issubclass(ReEncoder.Encoder, encoder):
                 raise Exception("Passed encoder is of unknown type.")
@@ -270,27 +265,29 @@ class ReEncoder:
             for encoder in self.encoders:
                 step += 1
 
-                ReEncoder.log('[.] Trying: {} (peeled off: {}). Current form: "{}"'.format(encoder.name(), peeledOff, currData))
+                ReEncoder.log(
+                    f'[.] Trying: {encoder.name()} (peeled off: {peeledOff}). Current form: "{currData}"'
+                )
 
                 if encoder.check(currData):
                     if encoder.name() == 'None':
                         continue
 
                     if encoder.name().lower().startswith('base64') and (len(currData) % 4 == 0):
-                        ReEncoder.log('[.] Unclear situation whether input ({}) is Base64 encoded. Branching.'.format(
-                            currData
-                        ))
+                        ReEncoder.log(
+                            f'[.] Unclear situation whether input ({currData}) is Base64 encoded. Branching.'
+                        )
 
                         yield ('None', currData, True)
 
                     if encoder.name().lower().startswith('hex') and (len(currData) % 2 == 0):
-                        ReEncoder.log('[.] Unclear situation whether input ({}) is Hex encoded. Branching.'.format(
-                            currData
-                        ))
+                        ReEncoder.log(
+                            f'[.] Unclear situation whether input ({currData}) is Hex encoded. Branching.'
+                        )
 
                         yield ('None', currData, True)
 
-                    ReEncoder.log('[+] Detected encoder: {}'.format(encoder.name()))
+                    ReEncoder.log(f'[+] Detected encoder: {encoder.name()}')
 
                     currData = encoder.decode(currData)
                     yield (encoder.name(), currData, False)
@@ -303,7 +300,7 @@ class ReEncoder:
                 break
 
     def formEncodingCandidates(self, root):
-        iters = [[node for node in children] for children in anytree.LevelOrderGroupIter(root)]
+        iters = [list(children) for children in anytree.LevelOrderGroupIter(root)]
 
         candidates = []
 
@@ -311,9 +308,9 @@ class ReEncoder:
             name = node.name
             decoded = node.decoded
 
-            ReEncoder.log('[.] Candidate for best decode using {}: "{}"...'.format(
-                name, decoded[:20]
-            ))
+            ReEncoder.log(
+                f'[.] Candidate for best decode using {name}: "{decoded[:20]}"...'
+            )
 
             candidates.append([name, decoded, 0.0])
 
@@ -338,13 +335,7 @@ class ReEncoder:
         probs = [float(c) / len(data) for c in counts.values()]
         probs = [p for p in probs if p > 0.]
 
-        ent = 0
-
-        for p in probs:
-            if p > 0.:
-                ent -= p * math.log(p, base[unit])
-
-        return ent
+        return 0 - sum(p * math.log(p, base[unit]) for p in probs if p > 0.)
 
     def evaluateEncodingTree(self, root):
         (printableEncodings, printableCandidate) = self.evaluateEncodingTreePicker(root, False)
@@ -360,12 +351,12 @@ class ReEncoder:
             ReEncoder.log('Trying to determine preferred output format...')
 
         ReEncoder.log('\n---------------------------------------')
-        ReEncoder.log('[>] Winning printable encoding path scored: {} points.'.format(
-            printableCandidate[2]
-        ))
-        ReEncoder.log('[>] Winning binary encoding path scored: {} points.'.format(
-            binaryCandidate[2]
-        ))
+        ReEncoder.log(
+            f'[>] Winning printable encoding path scored: {printableCandidate[2]} points.'
+        )
+        ReEncoder.log(
+            f'[>] Winning binary encoding path scored: {binaryCandidate[2]} points.'
+        )
 
         if(printableCandidate[2] >= binaryCandidate[2]):
             ReEncoder.log('\n[+] Choosing all-time winner: PRINTABLE output format.')
@@ -400,13 +391,9 @@ class ReEncoder:
         ReEncoder.log('[?] Other equally good candidate paths:\n' + str(winningPaths))
         winningPath = winningPaths[0]
 
-        preferred = 'printable'
-        if preferBinary:
-            preferred = 'binary'
-
-        ReEncoder.log('[+] Winning decode path for {} output is:\n{}'.format(
-            preferred,
-            str(winningPath))
+        preferred = 'binary' if preferBinary else 'printable'
+        ReEncoder.log(
+            f'[+] Winning decode path for {preferred} output is:\n{str(winningPath)}'
         )
 
         encodings = [x.name for x in winningPath.path if x != 'None']
@@ -434,12 +421,12 @@ class ReEncoder:
             decoded = candidate[1]
             points = float(candidate[2])
             entropy = ReEncoder.entropy(decoded)
-            printables = sum([int(x in string.printable) for x in decoded])
+            printables = sum(int(x in string.printable) for x in decoded)
             nonprintables = len(decoded) - printables
 
-            ReEncoder.log('[=] Evaluating candidate: {} (entropy: {}, data: "{}")'.format(
-                name, entropy, decoded
-            ))
+            ReEncoder.log(
+                f'[=] Evaluating candidate: {name} (entropy: {entropy}, data: "{decoded}")'
+            )
 
             # Step 1: Adding points for printable percentage.
             printablePoints = float(weights['printableChars']) * (float(printables) / float(len(decoded)))
@@ -448,8 +435,8 @@ class ReEncoder:
             # Step 2: If encoder is Base64 and was previously None
             #    - then length and entropy of previous values should be of slighly lower weights
             if name.lower() == 'none' \
-                and len(candidates) > i+1 \
-                and candidates[i+1][0].lower().startswith('base64'):
+                    and len(candidates) > i+1 \
+                    and candidates[i+1][0].lower().startswith('base64'):
                 ReEncoder.log('\tAdding fine for being base64')
                 entropyPoints = entropy * (weights['entropyScore'] * 0.666666)
                 lengthPoints = float(len(decoded)) * (weights['length'] * 0.666666)
@@ -459,24 +446,24 @@ class ReEncoder:
 
             if printables > nonprintables:
                 ReEncoder.log('More printable chars than binary ones.')
-                ReEncoder.log('\tAdding {} points for printable entropy.'.format(entropyPoints))
+                ReEncoder.log(f'\tAdding {entropyPoints} points for printable entropy.')
 
-                ReEncoder.log('\tAdding {} points for printable characters.'.format(printablePoints))
+                ReEncoder.log(f'\tAdding {printablePoints} points for printable characters.')
                 points += printablePoints
             else:
                 ReEncoder.log('More binary chars than printable ones.')
-                ReEncoder.log('\tAdding {} points for binary entropy.'.format(entropyPoints))
+                ReEncoder.log(f'\tAdding {entropyPoints} points for binary entropy.')
 
-                ReEncoder.log('\tAdding {} points for binary characters.'.format(nonPrintablePoints))
+                ReEncoder.log(f'\tAdding {nonPrintablePoints} points for binary characters.')
                 points += nonPrintablePoints
 
             points += entropyPoints
 
             # Step 4: Add points for length
-            ReEncoder.log('\tAdding {} points for length.'.format(lengthPoints))
+            ReEncoder.log(f'\tAdding {lengthPoints} points for length.')
             points += lengthPoints
-            
-            ReEncoder.log('\tScored in total: {} points.'.format(points))
+
+            ReEncoder.log(f'\tScored in total: {points} points.')
             candidates[i][2] = points
 
         return candidates
@@ -490,32 +477,34 @@ class ReEncoder:
         prev = root
 
         for (name, curr, branch) in self.generateEncodingTree(data):
-            ReEncoder.log('[*] Generator returned: ("{}", "{}", {})'.format(
-                name, curr[:20], str(branch)
-            ))
+            ReEncoder.log(
+                f'[*] Generator returned: ("{name}", "{curr[:20]}", {str(branch)})'
+            )
 
             currNode = anytree.Node(name, parent = prev, decoded = curr)
-            if branch:
-                pass
-            else:
+            if not branch:
                 prev = currNode
 
         for pre, fill, node in anytree.RenderTree(root):
             if node.name != 'None':
-                ReEncoder.log("%s%s (%s)" % (pre, node.name, node.decoded[:20].decode('ascii', 'ignore')))
+                ReEncoder.log(
+                    f"{pre}{node.name} ({node.decoded[:20].decode('ascii', 'ignore')})"
+                )
 
         self.encodings = self.getWinningDecodePath(root)
-        ReEncoder.log('[+] Selected encodings: {}'.format(str(self.encodings)))
+        ReEncoder.log(f'[+] Selected encodings: {str(self.encodings)}')
 
     def decode(self, data, preferredOutputFormat = PREFER_AUTO, encodings = []):
         self.preferredOutputFormat = preferredOutputFormat
 
-        if preferredOutputFormat != ReEncoder.PREFER_AUTO and \
-            preferredOutputFormat != ReEncoder.PREFER_TEXT and \
-            preferredOutputFormat != ReEncoder.PREFER_BINARY:
-            raise Exception('Unknown preferred output format specified in decode(): {}'.format(
-                preferredOutputFormat
-            ))
+        if preferredOutputFormat not in [
+            ReEncoder.PREFER_AUTO,
+            ReEncoder.PREFER_TEXT,
+            ReEncoder.PREFER_BINARY,
+        ]:
+            raise Exception(
+                f'Unknown preferred output format specified in decode(): {preferredOutputFormat}'
+            )
 
         if not encodings:
             self.process(data)
@@ -543,35 +532,33 @@ class ReEncoder:
 
 
 def main(argv):
-    # Sample 1: ZLIB -> Base64 -> URLEncode
-    sample = 'eJzzSM3JyVcozy%2FKSVFIK8rPVQhKdc1Lzk9JLVIEAIr8Cck%3D'
-
     # Sample 2: URLEncode -> Base64 -> HexEncode
     #sample = '4a5451344a5459314a545a6a4a545a6a4a545a6d4a5449774a5463334a545a6d4a5463794a545a6a4a5459304a5449784a5449774a544e684a544a6b4a544935'
 
     if len(argv) != 2:
         print('Usage: reencode.py <text|file>')
-        print('Using sample: "{}"'.format(sample))
+        # Sample 1: ZLIB -> Base64 -> URLEncode
+        sample = 'eJzzSM3JyVcozy%2FKSVFIK8rPVQhKdc1Lzk9JLVIEAIr8Cck%3D'
+
+        print(f'Using sample: "{sample}"')
         text = sample
     else:
         text = argv[1]
 
         if os.path.isfile(text):
-            f = open(text, 'rb')
-            text = f.read()
-            f.close()
-
+            with open(text, 'rb') as f:
+                text = f.read()
     decoder = ReEncoder()
     decoded = decoder.decode(text)
-    
-    print('(1) DECODED TEXT: "{}"'.format(decoded))
-    
-    decoded = 'FOO ' + decoded + ' BAR'
-    
-    print('\n(2) TO BE ENCODED TEXT: "{}"'.format(decoded))
-    
+
+    print(f'(1) DECODED TEXT: "{decoded}"')
+
+    decoded = f'FOO {decoded} BAR'
+
+    print(f'\n(2) TO BE ENCODED TEXT: "{decoded}"')
+
     decoded = decoder.encode(decoded)
-    print('(3) ENCODED FORM: "{}"'.format(decoded))
+    print(f'(3) ENCODED FORM: "{decoded}"')
 
 if __name__ == '__main__':
     main(sys.argv)

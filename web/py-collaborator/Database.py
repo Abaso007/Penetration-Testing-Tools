@@ -18,28 +18,28 @@ class Logger:
     @staticmethod
     def dbg(x):
         if DATABASE_LOGGING:
-            sys.stderr.write(u'[dbg] ' + str(x) + u'\n')
+            sys.stderr.write(f'[dbg] {str(x)}' + u'\n')
 
     @staticmethod
     def out(x):
-        Logger._out(u'[.] ' + str(x))
+        Logger._out(f'[.] {str(x)}')
 
     @staticmethod
     def info(x):
-        Logger._out(u'[?] ' + str(x))
+        Logger._out(f'[?] {str(x)}')
 
     @staticmethod
     def err(x):
         if DATABASE_LOGGING:
-            sys.stderr.write(u'[!] ' + str(x) + u'\n')
+            sys.stderr.write(f'[!] {str(x)}' + u'\n')
 
     @staticmethod
     def warn(x):
-        Logger._out(u'[-] ' + str(x))
+        Logger._out(f'[-] {str(x)}')
 
     @staticmethod
     def ok(x):
-        Logger._out(u'[+] ' + str(x))
+        Logger._out(f'[+] {str(x)}')
 
 
 class Database:
@@ -54,7 +54,6 @@ class Database:
 
     def __init__(self, initialId = 1000):
         self.queryId = initialId
-        pass
 
     def __del__(self):
         self.close()
@@ -102,7 +101,7 @@ class Database:
             return True
 
         except (pymysql.Error, pymysql.Error) as e:
-            Logger.err("Database connection failed: " + str(e))
+            Logger.err(f"Database connection failed: {str(e)}")
             return False
 
     def createCursor(self):
@@ -126,9 +125,9 @@ class Database:
     def query(self, query, tryAgain = False, params = None):
         self.queryId += 1
         if len(query)< 100:
-            Logger.dbg(u'SQL query (id: {}): "{}"'.format(self.queryId, query))
+            Logger.dbg(f'SQL query (id: {self.queryId}): "{query}"')
         else:
-            Logger.dbg(u'SQL query (id: {}): "{}...{}"'.format(self.queryId, query[:80], query[-80:]))
+            Logger.dbg(f'SQL query (id: {self.queryId}): "{query[:80]}...{query[-80:]}"')
 
         try:
             self.databaseCursor = self.createCursor()
@@ -136,7 +135,7 @@ class Database:
                 self.databaseCursor.execute(query, args = params)
             else:
                 self.databaseCursor.execute(query)
-            
+
             result = self.databaseCursor.fetchall()
 
             num = 0
@@ -144,22 +143,25 @@ class Database:
                 num += 1
                 if num > 5: break
                 if len(str(row)) < 100:
-                    Logger.dbg(u'Query (ID: {}) ("{}") results:\nRow {}.: '.format(self.queryId, str(query), num) + str(row))
+                    Logger.dbg(
+                        f'Query (ID: {self.queryId}) ("{str(query)}") results:\nRow {num}.: {str(row)}'
+                    )
                 else:
-                    Logger.dbg(u'Query (ID: {}) is too long'.format(self.queryId))
+                    Logger.dbg(f'Query (ID: {self.queryId}) is too long')
 
             return result
 
         except (pymysql.err.InterfaceError) as e:
             pass
-        except (pymysql.Error) as e:
-            if Database.checkIfReconnectionNeeded(e):
-                if tryAgain == False:
-                    Logger.err("Query (ID: {}) ('{}') failed. Need to reconnect.".format(self.queryId, query))
-                    self.reconnect()
-                    return self.query(query, True)
+        except pymysql.Error as e:
+            if Database.checkIfReconnectionNeeded(e) and tryAgain == False:
+                Logger.err(
+                    f"Query (ID: {self.queryId}) ('{query}') failed. Need to reconnect."
+                )
+                self.reconnect()
+                return self.query(query, True)
 
-            Logger.err("Query (ID: {}) ('{}') failed: ".format(self.queryId, query) + str(e))
+            Logger.err(f"Query (ID: {self.queryId}) ('{query}') failed: {str(e)}")
             return False
 
     @staticmethod
@@ -170,7 +172,9 @@ class Database:
             return False
 
     def reconnect(self):
-        Logger.info("Trying to reconnect after failure (last query: {})...".format(self.queryId))
+        Logger.info(
+            f"Trying to reconnect after failure (last query: {self.queryId})..."
+        )
         if self.databaseConnection != None:
             try:
                 self.databaseConnection.close()
@@ -203,9 +207,11 @@ class Database:
         '''
         self.queryId += 1
         if len(query)< 100:
-            Logger.dbg(u'SQL INSERT query (id: {}): "{}"'.format(self.queryId, query))
+            Logger.dbg(f'SQL INSERT query (id: {self.queryId}): "{query}"')
         else:
-            Logger.dbg(u'SQL INSERT query (id: {}): "{}...{}"'.format(self.queryId, query[:80], query[-80:]))
+            Logger.dbg(
+                f'SQL INSERT query (id: {self.queryId}): "{query[:80]}...{query[-80:]}"'
+            )
 
         assert not query.lower().startswith('select '), "Method insert() must NOT be invoked with SELECT queries!"
 
@@ -224,13 +230,14 @@ class Database:
                 self.databaseConnection.rollback()
             except: pass
 
-            if Database.checkIfReconnectionNeeded(e):
-                if tryAgain == False:
-                    Logger.err("Insert query (ID: {}) ('{}') failed. Need to reconnect.".format(self.queryId, query))
-                    self.reconnect()
-                    return self.insert(query, True)
+            if Database.checkIfReconnectionNeeded(e) and tryAgain == False:
+                Logger.err(
+                    f"Insert query (ID: {self.queryId}) ('{query}') failed. Need to reconnect."
+                )
+                self.reconnect()
+                return self.insert(query, True)
 
-            Logger.err("Insert Query (ID: {}) ('{}') failed: ".format(self.queryId, query) + str(e))
+            Logger.err(f"Insert Query (ID: {self.queryId}) ('{query}') failed: {str(e)}")
             return False, e.args[0], e.args[1]
 
     def delete(self, query):

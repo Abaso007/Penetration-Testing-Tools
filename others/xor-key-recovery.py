@@ -9,13 +9,9 @@
 import sys
 
 def xorstring(s, k):
-    out = [0 for c in range(len(s))]
+    out = [0 for _ in range(len(s))]
     key = []
-    if type(k) == type(int):
-        key = [k,]
-    else:
-        key = [ki for ki in k]
-
+    key = [k,] if type(k) == type(int) else list(k)
     for i in range(len(key)):
         for j in range(i, len(s), len(key)):
             out[j] = chr(ord(s[j]) ^ key[i])

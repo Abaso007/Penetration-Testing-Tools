@@ -57,13 +57,7 @@ def showConfig(stat):
 def inspectPacket(dtp):
     tlvs = dtp['DTP'].tlvlist
 
-    stat = -1
-    for tlv in tlvs:
-        if tlv.type == 2:
-            # TLV: DTPStatus
-            stat = ord(tlv.status)
-            break
-
+    stat = next((ord(tlv.status) for tlv in tlvs if tlv.type == 2), -1)
     print('    ' + '=' * 60)
     if stat == -1:
         print('[!] Something went wrong: Got invalid DTP packet.')
@@ -80,7 +74,7 @@ def inspectPacket(dtp):
         print('[+] VLAN Hopping via Switch Spoofing/trunking IS POSSIBLE.')
         print('\n\tSWITCH(config-if)# switchport dynamic desirable (or none)')
 
-    elif stat == 4 or stat == 0x84:
+    elif stat in [4, 0x84]:
         print('[+] DTP enabled, Switchport in Dynamic Auto configuration')
         print('[+] VLAN Hopping via Switch Spoofing/trunking IS POSSIBLE.')
         print('\n\tSWITCH(config-if)# switchport mode dynamic auto')
@@ -106,7 +100,7 @@ def inspectPacket(dtp):
     return True
 
 def packetCallback(pkt):
-    print('[>] Packet: ' + pkt.summary())
+    print(f'[>] Packet: {pkt.summary()}')
 
 def main(argv):
     if os.getuid() != 0:
@@ -115,9 +109,9 @@ def main(argv):
 
     load_contrib('dtp')
 
-    print('[*] Sniffing for DTP frames (Max count: {}, Max timeout: {} seconds)...'.format(
-        config['count'], config['timeout']
-    ))
+    print(
+        f"[*] Sniffing for DTP frames (Max count: {config['count']}, Max timeout: {config['timeout']} seconds)..."
+    )
 
     dtps = sniff(
         count = config['count'], 
@@ -134,17 +128,9 @@ def main(argv):
         print('\tSWITCH(config-if)# switchport mode access')
         return False
 
-    print('[*] Got {} DTP frames.\n'.format(
-        len(dtps)
-    ))
-    
-    success = False
-    for dtp in dtps:
-        if dtp.haslayer(DTP):
-            if inspectPacket(dtp):
-                success = True
-                break
+    print(f'[*] Got {len(dtps)} DTP frames.\n')
 
+    success = any(dtp.haslayer(DTP) and inspectPacket(dtp) for dtp in dtps)
     if not success:
         print('[-] Received possibly corrupted DTP frames! General failure.')
 

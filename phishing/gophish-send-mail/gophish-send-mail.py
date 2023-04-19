@@ -32,9 +32,7 @@ headers = {
 
 def get(url):
     r = requests.get(
-        f"{options['gophish_addr']}" + url,
-        headers = headers,
-        verify = False
+        f"{options['gophish_addr']}{url}", headers=headers, verify=False
     )
 
     if r.status_code != 200:
@@ -46,32 +44,32 @@ def get(url):
 
 def put(url, data):
     r = requests.put(
-        f"{options['gophish_addr']}" + url,
-        headers = headers,
-        json = data,
-        verify = False
+        f"{options['gophish_addr']}{url}",
+        headers=headers,
+        json=data,
+        verify=False,
     )
 
     if r.status_code != 200:
         print(f'[!] URL: {url} returned status code: {r.status_code}!')
         print(r.json())
         sys.exit(1)
-        
+
     return r.json()
 
 def post(url, data):
     r = requests.post(
-        f"{options['gophish_addr']}" + url,
-        headers = headers,
-        json = data,
-        verify = False
+        f"{options['gophish_addr']}{url}",
+        headers=headers,
+        json=data,
+        verify=False,
     )
 
     if r.status_code != 200:
         print(f'[!] URL: {url} returned status code: {r.status_code}!')
         print(r.json())
         sys.exit(1)
-        
+
     return r.json()
 
 def getTemplate():
@@ -86,7 +84,7 @@ def getTemplate():
 
 def updateTemplate(template, html):
     obj = {}
-    obj.update(template)
+    obj |= template
     obj['html'] = html
 
     if len(options['subject']) > 0:

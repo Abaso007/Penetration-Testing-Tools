@@ -25,14 +25,12 @@ def printDev(name, dev, txt='Bluetooth device'):
     print '[+] %s: "%s" (MAC: %s)' % (txt, name, dev)
 
 def retBtAddr(addr):
-    btAddr = str(hex(int(addr.replace(':', ''), 16) + 1))[2:]
-    btAddr = btAddr[0:2] + ':' + btAddr[2:4] + ':' + btAddr[4:6] + \
-            ':' + btAddr[6:8] + ':' + btAddr[8:10] + ':' + btAddr[10:12]
+    btAddr = hex(int(addr.replace(':', ''), 16) + 1)[2:]
+    btAddr = f'{btAddr[:2]}:{btAddr[2:4]}:{btAddr[4:6]}:{btAddr[6:8]}:{btAddr[8:10]}:{btAddr[10:12]}'
     return btAddr
 
 def checkBluetooth(btAddr):
-    btName = bluetooth.lookup_name(btAddr)
-    if btName:
+    if btName := bluetooth.lookup_name(btAddr):
         printDev('Hidden Bluetooth device detected', btName, btAddr)
         return True
 
@@ -56,19 +54,19 @@ def sendFile(dev, filename):
 def findDevs(opts):
     global foundDevs
     devList = bluetooth.discover_devices(lookup_names=True)
-    repeat = range(0, int(opts.repeat))
+    repeat = range(int(opts.repeat))
 
     for (dev, name) in devList:
         if dev not in foundDevs:
             name = str(bluetooth.lookup_name(dev))
             printDev(name, dev)
             foundDevs.append(dev)
-            for i in repeat:
+            for _ in repeat:
                 sendFile(dev, opts.file)
             continue
 
         if opts.spam:
-            for i in repeat:
+            for _ in repeat:
                 sendFile(dev, opts.file)
 
 def main():

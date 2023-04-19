@@ -22,24 +22,20 @@ def tamperUpx(outfile):
     )
 
     num = 0
-    sectnum = 0
-
     section_table_offset = (pe.DOS_HEADER.e_lfanew + 4 + 
         pe.FILE_HEADER.sizeof() + pe.FILE_HEADER.SizeOfOptionalHeader)
 
     found = 0
 
     print('Step 1. Renaming UPX sections...')
-    for sect in pe.sections:
+    for sectnum, sect in enumerate(pe.sections):
         section_offset = section_table_offset + sectnum * 0x28
-        sectnum += 1
-
         if sect.Name.decode().lower().startswith('upx'):
             found += 1
             newname = newSectionNames[num].encode() + ((8 - len(newSectionNames[num])) * b'\x00')
-            print('\tRenamed UPX section ({}) => ({})'.format(
-                sect.Name.decode(), newSectionNames[num]
-            ))
+            print(
+                f'\tRenamed UPX section ({sect.Name.decode()}) => ({newSectionNames[num]})'
+            )
             num += 1
             pe.set_bytes_at_offset(section_offset, newname)
 
@@ -53,7 +49,7 @@ def tamperUpx(outfile):
 
         prev = pe.__data__[pos-5:pos-1]
         if all(chr(c) in string.printable for c in prev):
-            print('\tRemoved "{}" indicator...'.format(prev.decode()))
+            print(f'\tRemoved "{prev.decode()}" indicator...')
             pe.set_bytes_at_offset(pos-5, b'\x00' * 4)
 
         print('\nStep 3. Corrupting PackHeader...')
@@ -63,13 +59,13 @@ def tamperUpx(outfile):
         method = pe.__data__[pos + 6]
         level = pe.__data__[pos + 7]
 
-        print('\tOverwriting metadata (version={}, format={}, method={}, level={})...'.format(
-            version, _format, method, level
-        ))
+        print(
+            f'\tOverwriting metadata (version={version}, format={_format}, method={method}, level={level})...'
+        )
 
-        pe.set_bytes_at_offset(pos + 4, b'\x00')            
-        pe.set_bytes_at_offset(pos + 5, b'\x00')            
-        pe.set_bytes_at_offset(pos + 6, b'\x00')            
+        pe.set_bytes_at_offset(pos + 4, b'\x00')
+        pe.set_bytes_at_offset(pos + 5, b'\x00')
+        pe.set_bytes_at_offset(pos + 6, b'\x00')
         pe.set_bytes_at_offset(pos + 7, b'\x00')
 
         #
@@ -94,11 +90,11 @@ def tamperUpx(outfile):
         print('\t\t- compressed_adler (c_adler): ({} / 0x{:x}) => (0)'.format(c_adler, c_adler))
         pe.set_dword_at_offset(pos + 12, 0)
         print('\t\t- uncompressed_len (u_len): ({} / 0x{:x}) => (0)'.format(u_len, u_len))
-        pe.set_dword_at_offset(pos + 16, 0)            
+        pe.set_dword_at_offset(pos + 16, 0)
         print('\t\t- compressed_len (c_len): ({} / 0x{:x}) => (0)'.format(c_len, c_len))
-        pe.set_dword_at_offset(pos + 20, 0) 
+        pe.set_dword_at_offset(pos + 20, 0)
         print('\t\t- original file size: ({} / 0x{:x}) => (0)'.format(origsize, origsize))
-        pe.set_dword_at_offset(pos + 24, 0) 
+        pe.set_dword_at_offset(pos + 24, 0)
         print('\t\t- filter id: ({} / 0x{:x}) => (0)'.format(filter_id, filter_id))
         pe.set_bytes_at_offset(pos + 28, b'\x00')
         print('\t\t- filter cto: ({} / 0x{:x}) => (0)'.format(filter_cto, filter_cto))
@@ -131,11 +127,7 @@ def main(argv):
         print('Usage: ./tamperUpx.py <infile> [outfile]')
 
     infile = argv[1]
-    outfile = ''
-
-    if len(argv) >= 3:
-        outfile = argv[2]
-
+    outfile = argv[2] if len(argv) >= 3 else ''
     if not os.path.isfile(infile):
         print('[!] Input file does not exist.')
         return 1

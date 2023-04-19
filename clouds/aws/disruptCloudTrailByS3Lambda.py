@@ -155,24 +155,24 @@ class Logger:
 
     @staticmethod
     def out(x): 
-        Logger._out('[>] ' + x)
+        Logger._out(f'[>] {x}')
     
     @staticmethod
     def info(x):
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
     
     @staticmethod
     def fatal(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
         sys.exit(1)
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
     @staticmethod
     def dbg(x):  
@@ -253,7 +253,7 @@ class CloudTrailDisruptor:
             # Due to fatal, code will not reach this path
             return False
 
-        Logger.ok(f'Role created.')
+        Logger.ok('Role created.')
         Logger.dbg(f'Returned: {out}')
 
         return out
@@ -283,7 +283,7 @@ class CloudTrailDisruptor:
             # Due to fatal, code will not reach this path
             return False
 
-        Logger.ok(f'Policy created.')
+        Logger.ok('Policy created.')
         Logger.dbg(f'Returned: {out}')
 
         return out
@@ -296,7 +296,7 @@ class CloudTrailDisruptor:
         attached = iam.list_attached_role_policies(RoleName = role_name)
         for policy in attached['AttachedPolicies']:
             if policy['PolicyArn'] == policy_arn:
-                Logger.fail(f'Policy is already attached.')
+                Logger.fail('Policy is already attached.')
                 return True
 
         try:
@@ -309,19 +309,19 @@ class CloudTrailDisruptor:
             # Due to fatal, code will not reach this path
             return False
 
-        Logger.ok(f'Policy attached.')
+        Logger.ok('Policy attached.')
         return True
 
     # Source: https://stackoverflow.com/a/51899017
     @staticmethod
     def create_in_mem_zip_archive(file_map, files):
         buf = io.BytesIO()
-        Logger.dbg("Building zip file: " + str(files))
+        Logger.dbg(f"Building zip file: {str(files)}")
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zfh:
             for file_name in files:
                 file_blob = file_map.get(file_name)
                 if file_blob is None:
-                    Logger.fail("Missing file {} from files".format(file_name))
+                    Logger.fail(f"Missing file {file_name} from files")
                     continue
                 try:
                     info = zipfile.ZipInfo(file_name)
@@ -331,7 +331,6 @@ class CloudTrailDisruptor:
                     zfh.writestr(info, file_blob)
                 except Exception as ex:
                     raise ex
-                    Logger.fail("Error reading file: " + file_name + ", error: " + ex.message)
         buf.seek(0)
         return buf.read()
 
@@ -368,7 +367,7 @@ class CloudTrailDisruptor:
                 Timeout = 30,
                 Publish = True
             )
-            Logger.ok(f'Function created.')
+            Logger.ok('Function created.')
         except Exception as e:
             Logger.fail(f'Could not create a Lambda function: {e}')
             if 'The role defined for the function cannot be assumed by Lambda.' in str(e):
@@ -483,7 +482,7 @@ def monkeyPatchBotocoreUserAgent():
 
     try:
         from _pytest.monkeypatch import MonkeyPatch
-    except (ImportError, ModuleNotFoundError) as e:
+    except ImportError as e:
         print('[!] Please install "pytest" first: pip3 install pytest')
         print('\tthis will be used to patch-up boto3 library to avoid GuardDuty Kali detection')
         sys.exit(0)
@@ -491,8 +490,6 @@ def monkeyPatchBotocoreUserAgent():
     monkeypatch = MonkeyPatch()
     def my_user_agent(self):
         return "Boto3/1.9.89 Python/2.7.12 Linux/4.2.0-42-generic"
-
-        monkeypatch.setattr(botocore.session.Session, 'user_agent', my_user_agent)
 
 def main(argv):
     opts = parseOptions(argv)

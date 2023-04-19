@@ -38,10 +38,9 @@ def opts(argv):
         print('[!] Input filename does not have extension! You must point this script to the existing file having some original extension.')
         sys.exit(1)
 
-    if not args.dryrun:
-        if not os.path.isfile(args.filename):
-            print('[!] Input file does not exist!')
-            sys.exit(1)
+    if not args.dryrun and not os.path.isfile(args.filename):
+        print('[!] Input file does not exist!')
+        sys.exit(1)
 
     return args
 
@@ -79,7 +78,7 @@ def main(argv):
         q = '"'
 
     out1 = filename2 + '\\u202e' + targetext + '.' + ext
-    rest = targetext + '.' + ext
+    rest = f'{targetext}.{ext}'
     out2 = filename2 + rest[::-1]
     out3 = filename2 + RTLO + targetext + '.' + ext
 
@@ -99,7 +98,7 @@ OUTPUT:
 
     old = args.filename
     new = os.path.dirname(old) + os.sep + filename2 + RTLO + targetext + '.' + ext
-    
+
     #
     # Using manual bytes copy cause I was having some weird issues with shutil.copy()
     # 

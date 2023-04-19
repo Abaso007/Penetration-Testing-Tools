@@ -89,11 +89,11 @@ Usage:  ./markNodesOwned.py <nodes-file>
 
     nodes = []
     with open(nodesFile) as f: 
-        for x in f.readlines():
+        for x in f:
             if x.strip().startswith('#'):
                 continue
 
-            if not '@' in x:
+            if '@' not in x:
                 raise Exception('Node names must include "@" and be in form: NAME@DOMAIN !')
             nodes.append(x.strip())
 
@@ -120,7 +120,7 @@ Usage:  ./markNodesOwned.py <nodes-file>
     totalTime = 0.0
     runs = 0
 
-    print('[+] To be marked: {} nodes.'.format(len(nodes)))
+    print(f'[+] To be marked: {len(nodes)} nodes.')
 
     try:
         with driver.session() as session:
@@ -135,7 +135,7 @@ Usage:  ./markNodesOwned.py <nodes-file>
                 runs += 1
 
                 finishEta = ((len(nodes) / numberOfNodesToAddPerStep) - runs) * (totalTime / float(runs))
-                if finishEta < 0: finishEta = 0
+                finishEta = max(finishEta, 0)
 
                 print(f'[+] Marked {b-a} nodes in {stop - start:.3f} seconds. Finish ETA: in {finishEta:.3f} seconds.')
 

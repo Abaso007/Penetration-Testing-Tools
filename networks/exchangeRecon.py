@@ -73,28 +73,28 @@ class Logger:
 
     @staticmethod
     def out(x): 
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
     
     @staticmethod
     def info(x):
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
 
     @staticmethod
     def dbg(x):
         if config['debug']:
-            Logger._out('[DEBUG] ' + x)
+            Logger._out(f'[DEBUG] {x}')
     
     @staticmethod
     def err(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 def hexdump(data):
     s = ''
@@ -116,15 +116,11 @@ def hexdump(data):
         for j in range(n-16, n):
             if j >= len(data): break
             line += '%02x' % (data[j] & 0xff)
-            if j % 8 == 7 and j % 16 != 15:
-                line += '-'
-            else:
-                line += ' '
-
+            line += '-' if j % 8 == 7 and j % 16 != 15 else ' '
         line += ' ' * (3 * 16 + 7 - len(line)) + ' | '
         for j in range(n-16, n):
             if j >= len(data): break
-            c = data[j] if not (data[j] < 0x20 or data[j] > 0x7e) else '.'
+            c = data[j] if data[j] >= 0x20 and data[j] <= 0x7e else '.'
             line += '%c' % c
 
         line = line.ljust(74, ' ') + ' |'
@@ -197,7 +193,7 @@ class NtlmParser:
         return [desc for val, desc in self.flags_tbl if val & flags]
 
     def flags_str(self, flags):
-        return ['%s' % s for s in self.flags_lst(flags)]
+        return [f'{s}' for s in self.flags_lst(flags)]
 
     def clean_str(self, st):
         return ''.join((s if s in NtlmParser.VALID_CHRS else '?') for s in st)
@@ -215,7 +211,7 @@ class NtlmParser:
                 try:
                     self.string = self.raw.decode('utf-16', 'ignore')
                 except:
-                    self.string = ''.join(filter(lambda x: str(x) != str('\0'), self.raw))
+                    self.string = ''.join(filter(lambda x: str(x) != '\0', self.raw))
                 self.utf16 = True
             else:
                 self.string = self.raw
@@ -225,9 +221,7 @@ class NtlmParser:
 
     def parse(self, data):
         st = base64.b64decode(data)
-        if st[:len('NTLMSSP')].decode() == "NTLMSSP":
-            pass
-        else:
+        if st[: len('NTLMSSP')].decode() != "NTLMSSP":
             raise Exception("NTLMSSP header not found at start of input string")
 
         ver = struct.unpack("<i", st[8:12])[0]
@@ -255,10 +249,7 @@ class NtlmParser:
 
     def opt_inline_str(self, name, st, offset, sz):
         nxt = st[offset:offset+sz]
-        if len(nxt) == sz:
-            self.output[name] = self.clean_str(nxt)
-        else:
-            self.output[name] = ""
+        self.output[name] = self.clean_str(nxt) if len(nxt) == sz else ""
 
     def request(self, st):
         hdr_tup = struct.unpack("<i", st[12:16])
@@ -282,7 +273,7 @@ class NtlmParser:
     def challenge(self, st):
         hdr_tup = struct.unpack("<hhiiQ", st[12:32])
 
-        self.output['Target Name'] = str(NtlmParser.StrStruct(hdr_tup[0:3], st))
+        self.output['Target Name'] = str(NtlmParser.StrStruct(hdr_tup[:3], st))
         self.output['Challenge'] = hdr_tup[4]
 
         flags = hdr_tup[3]
@@ -325,7 +316,7 @@ class NtlmParser:
     def response(self, st):
         hdr_tup = struct.unpack("<hhihhihhihhihhi", st[12:52])
 
-        self.output['LM Resp'] = str(NtlmParser.StrStruct(hdr_tup[0:3], st))
+        self.output['LM Resp'] = str(NtlmParser.StrStruct(hdr_tup[:3], st))
         self.output['NTLM Resp'] = str(NtlmParser.StrStruct(hdr_tup[3:6], st))
         self.output['Target Name'] = str(NtlmParser.StrStruct(hdr_tup[6:9], st))
         self.output['User Name'] = str(NtlmParser.StrStruct(hdr_tup[9:12], st))
@@ -675,11 +666,11 @@ class ExchangeRecon:
                     }
 
                     x509 = crypto.load_certificate(crypto.FILETYPE_ASN1,self.server_tls_params['DER_peercert'])
-                    
-                    out = ''
-                    for elem in x509.get_subject().get_components():
-                        out += f'\t{elem[0].decode()} = {elem[1].decode()}\n'
 
+                    out = ''.join(
+                        f'\t{elem[0].decode()} = {elem[1].decode()}\n'
+                        for elem in x509.get_subject().get_components()
+                    )
                     Logger.dbg(out)
                     self.results['SSL Certificate Subject components'] = out[1:-1]
 
@@ -715,8 +706,7 @@ class ExchangeRecon:
                 break
             wait = 0
             try:
-                data = the_socket.recv(4096).decode()
-                if data:
+                if data := the_socket.recv(4096).decode():
                     total_data.append(data)
                     begin = time.time()
                     data = ''
@@ -725,13 +715,12 @@ class ExchangeRecon:
                     time.sleep(0.1)
             except:
                 pass
-        
-        result = ''.join(total_data)
-        return result
+
+        return ''.join(total_data)
 
     def send(self, data, dontReconnect = False):
         Logger.dbg(f"================= [SEND] =================\n{data}\n")
-        
+
         try:
             self.socket.send(data.encode())
         except Exception as e:
@@ -742,10 +731,9 @@ class ExchangeRecon:
                 Logger.dbg("Reconnecing...")
                 if self.connect(self.hostname, self.port):
                     return self.send(data, True)
-                else:
-                    Logger.err("Could not reconnect with remote host. Failure.")
-                    sys.exit(-1)
-        
+                Logger.err("Could not reconnect with remote host. Failure.")
+                sys.exit(-1)
+
         out = ExchangeRecon.recvall(self.socket, config['timeout'])
 
         if not out and self.reconnect < ExchangeRecon.MAX_RECONNECTS and not dontReconnect:
@@ -753,9 +741,8 @@ class ExchangeRecon:
             self.reconnect += 1
             if self.connect(self.hostname, self.port):
                 return self.send(data, True)
-            else:
-                Logger.err("Could not reconnect with remote host. Failure.")
-                sys.exit(-1)
+            Logger.err("Could not reconnect with remote host. Failure.")
+            sys.exit(-1)
 
         Logger.dbg(f"================= [RECV] =================\n{out}\n")
         return out
@@ -772,15 +759,8 @@ class ExchangeRecon:
         if host:
             hdrs['Host'] = host
 
-        headersstr = ''
-        for k, v in hdrs.items():
-            headersstr += f'{k}: {v}\r\n'
-
-        if data:
-            data = f'\r\n{data}'
-        else:
-            data = ''
-
+        headersstr = ''.join(f'{k}: {v}\r\n' for k, v in hdrs.items())
+        data = f'\r\n{data}' if data else ''
         packet = f'{method} {url} {httpver}\r\n{headersstr}{data}\r\n\r\n'
         raw = self.send(packet)
         resp = ExchangeRecon.response(raw)
@@ -884,21 +864,22 @@ class ExchangeRecon:
             kl = k.lower()
 
             if kl == 'x-owa-version':
-                ver = ExchangeRecon.parseVersion(v)
-                if ver:
+                if ver := ExchangeRecon.parseVersion(v):
                     if ExchangeRecon.owaVersionInHttpHeader not in self.results.keys():
                         self.results[ExchangeRecon.owaVersionInHttpHeader] = ''
-                        
-                    self.results[ExchangeRecon.owaVersionInHttpHeader] += '\n\t({})'.format(str(ver))
+
+                    self.results[ExchangeRecon.owaVersionInHttpHeader] += f'\n\t({str(ver)})'
 
             elif kl == 'www-authenticate':
                 realms = list(filter(lambda x: 'basic realm="' in x, lowervals))
                 if len(realms):
-                    Logger.dbg(f"Got basic realm.: {str(realms)}")
+                    Logger.dbg(f"Got basic realm.: {realms}")
 
-                    m = re.search(r'([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})', realms[0])
-                    if m:
-                        self.results[ExchangeRecon.leakedInternalIp] = m.group(1)
+                    if m := re.search(
+                        r'([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})',
+                        realms[0],
+                    ):
+                        self.results[ExchangeRecon.leakedInternalIp] = m[1]
 
                 negotiates = list(filter(lambda x: 'Negotiate ' in x, vals))
                 if len(negotiates):
@@ -936,20 +917,18 @@ class ExchangeRecon:
             if kl not in ExchangeRecon.usualHeaders:
                 l =  f'{k}: {v}'
                 if ExchangeRecon.unusualHeaders not in self.results.keys() or \
-                    l not in self.results[ExchangeRecon.unusualHeaders]:
-                    Logger.info("Came across unusual HTTP header: " + l)
+                        l not in self.results[ExchangeRecon.unusualHeaders]:
+                    Logger.info(f"Came across unusual HTTP header: {l}")
                     if ExchangeRecon.unusualHeaders not in self.results:
                         self.results[ExchangeRecon.unusualHeaders] = set()
                     self.results[ExchangeRecon.unusualHeaders].add(l)
 
         for name, rex in ExchangeRecon.htmlregexes.items():
-            m = re.search(rex, resp['data'])
-            if m:
-                self.results[name] = m.group(1)
-                if 'Outlook Web App version leaked' in name:
-                    ver = ExchangeRecon.parseVersion(m.group(1))
-                    if ver:
-                        self.results[name] += '\n\t({})'.format(str(ver))
+            if m := re.search(rex, resp['data']):
+                self.results[name] = m[1]
+                if ver := ExchangeRecon.parseVersion(m[1]):
+                    if 'Outlook Web App version leaked' in name:
+                        self.results[name] += f'\n\t({str(ver)})'
 
     @staticmethod
     def parseVersion(lookup):
@@ -966,7 +945,7 @@ class ExchangeRecon:
 
         for i in range(len(sortedversions)):
             if sortedversions[i].version.startswith(lookup):
-                sortedversions[i].name = 'fuzzy match: ' + sortedversions[i].name
+                sortedversions[i].name = f'fuzzy match: {sortedversions[i].name}'
                 return sortedversions[i]
 
         for i in range(len(sortedversions)):
@@ -979,7 +958,7 @@ class ExchangeRecon:
                 nextver = packaging.version.parse(sortedversions[i+1].version)
 
             if lookupparsed >= thisver and lookupparsed < nextver:
-                sortedversions[i].name = 'fuzzy match: ' + sortedversions[i].name
+                sortedversions[i].name = f'fuzzy match: {sortedversions[i].name}'
                 return sortedversions[i]
 
         return None
@@ -1102,15 +1081,13 @@ class ExchangeRecon:
                 Logger.dbg(f"Trying smtp on port {port}...")
                 if self.smtpInteract(self.hostname, port, _ssl = False):
                     break
-                else:
-                    Logger.dbg(f"Trying smtp SSL on port {port}...")
-                    if self.smtpInteract(self.hostname, port, _ssl = True):
-                        break
+                Logger.dbg(f"Trying smtp SSL on port {port}...")
+                if self.smtpInteract(self.hostname, port, _ssl = True):
+                    break
 
             except Exception as e:
                 Logger.dbg(f"Failed fetching SMTP replies: {e}")
                 raise
-                continue
 
     @staticmethod
     def _smtpconnect(host, port, _ssl):
@@ -1154,9 +1131,7 @@ class ExchangeRecon:
             code, msg = server.ehlo()
 
         msg = msg.decode()
-        for line in msg.split('\n'):
-            capabilities.append(line.strip())
-
+        capabilities.extend(line.strip() for line in msg.split('\n'))
         try:
             server.starttls()
             code, msg = server.ehlo()
@@ -1170,9 +1145,7 @@ class ExchangeRecon:
 
         msg = msg.decode()
         Logger.info(f"SMTP server banner & capabilities:\n-------\n{msg}\n-------\n")
-        for line in msg.split('\n'):
-            capabilities.append(line.strip())
-
+        capabilities.extend(line.strip() for line in msg.split('\n'))
         try:
             msg = server.help()
         except Exception:
@@ -1188,9 +1161,7 @@ class ExchangeRecon:
             msg = server.help()
 
         msg = msg.decode()
-        for line in msg.split('\n'):
-            capabilities.append(line.strip())
-
+        capabilities.extend(line.strip() for line in msg.split('\n'))
         skipThese = (
             '8BITMIME',
             'STARTTLS',
@@ -1215,18 +1186,14 @@ class ExchangeRecon:
 
         unfiltered = set()
         for line in capabilities:
-            skip = False
-            for n in skipThese:
-                if n in line:
-                    skip = True
-                    break
+            skip = any(n in line for n in skipThese)
             if not skip:
                 unfiltered.add(line)
 
 
         if len(unfiltered):
             self.results[ExchangeRecon.legacyMailCapabilities] = \
-                '\t- ' + '\n\t- '.join(unfiltered)
+                    '\t- ' + '\n\t- '.join(unfiltered)
 
         try:
             server.quit()
@@ -1258,16 +1225,16 @@ class ExchangeRecon:
             ip = found_dns_domain
 
         techniques = {
-            f'VRFY root' : None,
-            f'EXPN root' : None,
-            f'MAIL FROM:<test@{ip}>' : None,
-            f'RCPT TO:<test@{ip}>' : None,
+            'VRFY root': None,
+            'EXPN root': None,
+            f'MAIL FROM:<test@{ip}>': None,
+            f'RCPT TO:<test@{ip}>': None,
         }
 
         server = _reconnect(host, port, _ssl)
 
         likely = 0
-        for data in techniques.keys():
+        for data in techniques:
             for i in range(3):
                 try:
                     code, msg = server.docmd(data)
@@ -1318,7 +1285,7 @@ def parseOptions(argv):
 
     args = parser.parse_args()
 
-    if not 'hostname' in args:
+    if 'hostname' not in args:
         Logger.err('You must specify a hostname to launch!')
         return False
 
@@ -1335,7 +1302,7 @@ def output(hostname, out):
         if not v: continue
         if isinstance(v, str):
             print(f"*) {k}:\n\t{v.strip()}\n")
-        elif isinstance(v, list)  or isinstance(v, set):
+        elif isinstance(v, (list, set)):
             v2 = '\n\t- '.join(v)
             print(f"*) {k}:\n\t- {v2}\n")
 

@@ -136,34 +136,34 @@ class Logger:
     @staticmethod
     def dbg(x):
         if config['debug']: 
-            sys.stdout.write('[dbg] ' + x + '\n')
+            sys.stdout.write(f'[dbg] {x}' + '\n')
 
     @staticmethod
     def out(x): 
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
     
     @staticmethod
     def info(x):
-        Logger._out('[?] ' + x)
+        Logger._out(f'[?] {x}')
     
     @staticmethod
     def err(x): 
-        Logger._out('[!] ' + x)
+        Logger._out(f'[!] {x}')
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 def processRegex(inputRegex):
     for marker in markers:
         if '\\' + marker in inputRegex:
             inputRegex = inputRegex.replace('\\' + marker, markers[marker])
 
-    inputRegex = '^\\s*{}\\s*.*$'.format(inputRegex)
+    inputRegex = f'^\\s*{inputRegex}\\s*.*$'
     return inputRegex
 
 def cisco7Decrypt(data):
@@ -181,7 +181,7 @@ def cisco7Decrypt(data):
     result = regex.search(data)
     try:
         if result:
-            s, e = int(result.group(1)), result.group(2)
+            s, e = int(result[1]), result[2]
             for pos in range(0, len(e), 2):
                 magic = int(e[pos] + e[pos+1], 16)
                 newchar = ''
@@ -203,10 +203,9 @@ def tryToCisco7Decrypt(creds):
     decrypted = []
     for m in re.finditer(markers['cisco7'], creds, re.I):
         f = m.group(2) if m.group(2) != None else m.group(1)
-        out = cisco7Decrypt(f)
-        if out:
+        if out := cisco7Decrypt(f):
             decrypted.append(out)
-    
+
     if len(decrypted):
         return " (decrypted cisco 7: '" + "', '".join(decrypted) + "')"
 
@@ -226,46 +225,43 @@ def matchLines(file, lines, technology):
                 continue
 
             processedRex = processRegex(regexes[technology][rex])
-            matched = re.match(processedRex, line, re.I)
-            if matched:
+            if matched := re.match(processedRex, line, re.I):
                 num += 1
 
                 foundCreds.add(line)
                 f = [x for x in matched.groups(1) if type(x) == str]
                 creds = '", "'.join(f)
                 creds += tryToCisco7Decrypt(line)
-                
+
                 results.append((
                     file, technology, rex, creds
                 ))
 
                 if config['lines'] != 0:
-                    Logger._out('\n[+] {}: {}: {}'.format(
-                        technology, rex, creds
-                    ))
+                    Logger._out(f'\n[+] {technology}: {rex}: {creds}')
 
                     if idx - config['lines'] >= 0:
                         for i in range(idx - config['lines'], idx):
                             Logger._out('[{:04}]\t\t{}'.format(i, lines[i]))
-                            
+
                     Logger._out('[{:04}]==>\t{}'.format(idx, line))
 
                     if idx + 1 + config['lines'] < len(lines):
                         for i in range(idx + 1, idx + config['lines'] + 1):
                             Logger._out('[{:04}]\t\t{}'.format(i, lines[i]))
 
-                Logger.dbg('\tRegex used: [ {} ]'.format(processedRex))
+                Logger.dbg(f'\tRegex used: [ {processedRex} ]')
     return num
 
 def processFile(file):
     lines = []
 
-    Logger.info('Processing file: "{}"'.format(file))
+    Logger.info(f'Processing file: "{file}"')
     try:
         with open(file, 'r') as f:
             lines = [ line.strip() for line in f.readlines()]
     except Exception as e:
-        Logger.err("Parsing file '{}' failed: {}.".format(file, str(e)))
+        Logger.err(f"Parsing file '{file}' failed: {str(e)}.")
         return 0
 
     num = 0
@@ -367,7 +363,7 @@ def printResults():
             out += '[+] {}: {}: "{}"\n'.format(
                 technology, rex, creds
             )
-        
+
         return out
 
     maxTechnologyWidth = 0
@@ -386,7 +382,7 @@ def printResults():
 
     outputToPrint = ''
 
-    if config['format'] == 'normal' or config['format'] == 'tabular':
+    if config['format'] in ['normal', 'tabular']:
         outputToPrint += '\n=== CREDENTIALS FOUND:\n'
     elif config['format'] == 'csv':
         outputToPrint += config['csv_delimiter'].join(cols)
@@ -412,7 +408,7 @@ def printResults():
             technology, rex, creds = result
             outputToPrint += _print(file, technology, rex, creds)
 
-    if not config['no_others'] and (config['format'] == 'normal' or config['format'] == 'tabular'):
+    if not config['no_others'] and config['format'] in ['normal', 'tabular']:
         outputToPrint += '\n\n=== BELOW LINES MAY BE FALSE POSITIVES:\n'
 
     for file, _results in otherResultsPerFile.items():
@@ -434,11 +430,8 @@ def main(argv):
         Logger.err('Options parsing failed.')
         return False
 
-    count = 0
-    for technology in regexes:
-        count += len(regexes[technology])
-
-    Logger.info('Capable of matching: {} patterns containing credentials.'.format(count))
+    count = sum(len(regexes[technology]) for technology in regexes)
+    Logger.info(f'Capable of matching: {count} patterns containing credentials.')
 
     num = 0
     if os.path.isfile(opts.file):
@@ -452,14 +445,14 @@ def main(argv):
     out = printResults()
 
     if config['output']:
-        Logger.info("Dumping credentials to the output file: '{}'".format(config['output']))
+        Logger.info(f"Dumping credentials to the output file: '{config['output']}'")
         with open(config['output'], 'w') as f:
             f.write(out)
     else:
         print(out)
 
-    if config['format'] == 'normal' or config['format'] == 'tabular':
-        print('\n[>] Found: {} credentials.'.format(num))
+    if config['format'] in ['normal', 'tabular']:
+        print(f'\n[>] Found: {num} credentials.')
 
 if __name__ == '__main__':
     main(sys.argv)

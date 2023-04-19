@@ -63,32 +63,32 @@ class Logger:
     @staticmethod
     def dbg(x):
         if config['debug']: 
-            sys.stdout.write('[dbg] ' + x + '\n')
+            sys.stdout.write(f'[dbg] {x}' + '\n')
 
     @staticmethod
     def out(x): 
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
     
     @staticmethod
     def info(x):
-        Logger._out('[?] ' + x)
+        Logger._out(f'[?] {x}')
     
     @staticmethod
     def err(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
     
     @staticmethod
     def fatal(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
         sys.exit(1)
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 def printJson(data):
     print(json.dumps(data, sort_keys=True, indent=4))
@@ -149,16 +149,15 @@ def postRequest(url, data=None, contentType = 'application/json', rawResp = Fals
 
     if config['dry_run']:
         print(f'[?] Dry-run mode: Skipping post request ({url})')
-        if rawResp:
-            class MockResponse():
-                def __init__(self, status_code, text):
-                    self.status_code = status_code
-                    self.text = text
-
-            return MockResponse(201, '')
-        else:
+        if not rawResp:
             return ''
 
+        class MockResponse():
+            def __init__(self, status_code, text):
+                self.status_code = status_code
+                self.text = text
+
+        return MockResponse(201, '')
     if contentType.endswith('/json'):
         resp = requests.post(fullurl, json=data, headers=headers, auth=auth)
     else:
@@ -192,9 +191,7 @@ def printFullGateway(gatewayId):
 
         print(f'{indent}Connectors:')
         num = 0
-        cnum = 0
-        for c in gateway['connectors']:
-            cnum += 1
+        for cnum, c in enumerate(gateway['connectors']):
             addr = ''
             port = ''
 
@@ -209,11 +206,11 @@ def printFullGateway(gatewayId):
 
         num = 0
         print(f'{indent}Channels:')
+        name = ''   # todo
+
         for c in gateway['channels']:
             num += 1
             kind = 'Channel'
-            name = ''   # todo
-
             if 'isNegotiationChannel' in c.keys() and c['isNegotiationChannel']:
                 kind = 'Negotiation Channel'
 
@@ -225,7 +222,7 @@ def printFullGateway(gatewayId):
 {indent}{indent}    Properties:''')
 
             for arg in c['propertiesText']['arguments']:
-                if type(arg) == list or type(arg) == tuple:
+                if type(arg) in [list, tuple]:
                     for arg1 in arg:
                         print(f'''{indent}{indent}        Name:    {arg1['name']}
 {indent}{indent}        Value:   {arg1['value']}
@@ -235,9 +232,7 @@ def printFullGateway(gatewayId):
 {indent}{indent}        Value:   {arg['value']}
 ''')
 
-        num = 0
-        for g in gateway['relays']:
-            num += 1
+        for num, g in enumerate(gateway['relays'], start=1):
             alive = ''
             elevated = ''
 
@@ -273,15 +268,8 @@ def onGetGateway(args):
     printFullGateway(args.name)
 
 def printFullRelay(r, num = 0, indent='    '):
-    alive = ''
-    elevated = ''
-
-    if r['isActive']:
-        alive = '\t\t\t(+)'
-
-    if r['hostInfo']['isElevated']:
-        elevated = '\t\t\t(###)'
-
+    alive = '\t\t\t(+)' if r['isActive'] else ''
+    elevated = '\t\t\t(###)' if r['hostInfo']['isElevated'] else ''
     print(f'''{indent}Relay {num}:              {r['name']}
 {indent}    Relay ID:         {r['agentId']}
 {indent}    Build ID:         {r['buildId']}
@@ -296,13 +284,11 @@ def printFullRelay(r, num = 0, indent='    '):
 {indent}        Process ID:   {r['hostInfo']['processId']}
 ''')
 
-    cnum = 0
     print(f'{indent}Channels:')
-    for c in r['channels']:
-        cnum += 1
-        kind = 'Channel'
-        name = ''   # todo
+    name = ''   # todo
 
+    for cnum, c in enumerate(r['channels'], start=1):
+        kind = 'Channel'
         if 'isNegotiationChannel' in c.keys() and c['isNegotiationChannel']:
             kind = 'Negotiation Channel'
 
@@ -314,7 +300,7 @@ def printFullRelay(r, num = 0, indent='    '):
 {indent}{indent}    Properties:''')
 
         for arg in c['propertiesText']['arguments']:
-            if type(arg) == list or type(arg) == tuple:
+            if type(arg) in [list, tuple]:
                 for arg1 in arg:
                     print(f'''{indent}{indent}        Name:    {arg1['name']}
 {indent}{indent}        Value:   {arg1['value']}
@@ -325,7 +311,7 @@ def printFullRelay(r, num = 0, indent='    '):
 ''')
 
 def onGetRelay(args):
-    Logger.dbg('in onListRelays(): ' + str(args))
+    Logger.dbg(f'in onListRelays(): {str(args)}')
 
     relays = collectRelays(args)
 
@@ -334,19 +320,15 @@ def onGetRelay(args):
         if config['format'] == 'json': print('{}')
         sys.exit(1)
 
-    num = 0
     if config['format'] == 'text':
-        for gateway, relay in relays:
-            num += 1
+        for num, (gateway, relay) in enumerate(relays, start=1):
             printFullRelay(relay, num)
 
     elif config['format'] == 'json':
         printJson(relays)
 
 def printGatewayText(g, num = 0):
-    alive = ''
-    if g['isActive']:
-        alive = '\t\t\t(+)'
+    alive = '\t\t\t(+)' if g['isActive'] else ''
     print(f'''
 Gateway {num}:\t{g['name']}
     Gateway ID: {g['agentId']}
@@ -355,20 +337,16 @@ Gateway {num}:\t{g['name']}
     Timestamp:  {datetime.fromtimestamp(g['timestamp'])}''')
 
 def onListGateways(args):
-    Logger.dbg('in onListGateways(): ' + str(args))
+    Logger.dbg(f'in onListGateways(): {str(args)}')
     gateways = getRequest('/api/gateway')
-    
+
     if config['format'] == 'json':
         printJson(gateways)
 
     elif config['format'] == 'text':
-        num = 0
-        for g in gateways:
-            num += 1
-            if args.active:
-                if not g['isActive']: continue
-
-            printGatewayText(g, num)
+        for num, g in enumerate(gateways, start=1):
+            if not args.active or g['isActive']:
+                printGatewayText(g, num)
 
 def listGatewayRelays(gatewayId, indent = '', onlyActive = False):
     relays = getRequest(f'/api/gateway/{gatewayId}')
@@ -388,9 +366,8 @@ def listGatewayRelays(gatewayId, indent = '', onlyActive = False):
             alive = ''
             elevated = ''
 
-            if onlyActive:
-                if not g['isActive']: continue
-
+            if onlyActive and not g['isActive']:
+                continue
             if g['isActive']:
                 alive = '\t\t\t(+)'
 
@@ -414,23 +391,10 @@ def listGatewayRelays(gatewayId, indent = '', onlyActive = False):
 def onListRelays(args):
     Logger.dbg('in onListRelays(): ')
 
-    if args.gateway_id != None:
+    if args.gateway_id is None:
         gateways = getRequest('/api/gateway')
-        for g in gateways:
-            if args.gateway_id == g['name'].lower():
-                print('\n== Relays connected to Gateway ' + g['name'] + ': ')
-                listGatewayRelays(g['agentId'], onlyActive = args.active)
-                return
-
-        listGatewayRelays(args.gateway_id, onlyActive = args.active)
-
-    else:
-        gateways = getRequest('/api/gateway')
-        num = 0
-        relays = {}
-        relays['gateways'] = []
-        for g in gateways:
-            num += 1
+        relays = {'gateways': []}
+        for num, g in enumerate(gateways, start=1):
             if config['format'] == 'text':
                 print(f'''
 Gateway {num}:\t{g['name']}''')
@@ -442,6 +406,16 @@ Gateway {num}:\t{g['name']}''')
 
         if config['format'] == 'json':
             printJson(relays)
+
+    else:
+        gateways = getRequest('/api/gateway')
+        for g in gateways:
+            if args.gateway_id == g['name'].lower():
+                print('\n== Relays connected to Gateway ' + g['name'] + ': ')
+                listGatewayRelays(g['agentId'], onlyActive = args.active)
+                return
+
+        listGatewayRelays(args.gateway_id, onlyActive = args.active)
 
 def collectRelays(args, nonFatal = False):
     relays = []
@@ -458,54 +432,53 @@ def collectRelays(args, nonFatal = False):
         Logger.info(f'Collecting relays matching name/ID: {relay_id}')
 
     for _gateway in gateways:
-        if len(gateway_id) > 0:
-            if _gateway["agentId"].lower() != gateway_id.lower() and _gateway["name"].lower() != gateway_id.lower():
-                continue
+        if (
+            len(gateway_id) > 0
+            and _gateway["agentId"].lower() != gateway_id.lower()
+            and _gateway["name"].lower() != gateway_id.lower()
+        ):
+            continue
 
         gateway = getRequest(f'/api/gateway/{_gateway["agentId"]}')
 
-        for relay in gateway['relays']:
-            if len(relay_id) > 0:
-                if relay["agentId"].lower() != relay_id.lower() and relay["name"].lower() != relay_id.lower():
-                    continue
-
-            relays.append((gateway, relay))
-
-    if len(relays) == 0 and not nonFatal:
+        relays.extend(
+            (gateway, relay)
+            for relay in gateway['relays']
+            if len(relay_id) <= 0
+            or relay["agentId"].lower() == relay_id.lower()
+            or relay["name"].lower() == relay_id.lower()
+        )
+    if not relays and not nonFatal:
         Logger.fatal('Could not find Relays matching filter criteria. Try changing gateway, relay criteria.')
 
     return relays
 
 def processCapability(gateway):
     caps = getRequest(f'/api/gateway/{gateway["agentId"]}/capability')
-    
-    commandIds = {}
-    channels = {}
-    peripherals = {}
 
+    commandIds = {}
     for gatewayVal in caps['gateway']:
         for commandVal in gatewayVal['commands']:
             commandIds[commandVal['name'].lower()] = commandVal['id']
 
             Logger.dbg(f'Gateway capability: commands: {commandVal["name"]} = {commandVal["id"]}')
 
-    for channel in caps['channels']:
-        channels[channel['name']] = channel['type']
+    channels = {channel['name']: channel['type'] for channel in caps['channels']}
+    peripherals = {peri['name']: peri['type'] for peri in caps['peripherals']}
+    Logger.dbg(
+        'Gateway supports following channels: ' + ', '.join(channels.keys())
+    )
+    Logger.dbg(
+        'Gateway supports following peripherals: '
+        + ', '.join(peripherals.keys())
+    )
 
-    for peri in caps['peripherals']:
-        peripherals[peri['name']] = peri['type']
-
-    Logger.dbg('Gateway supports following channels: ' + str(', '.join(channels.keys())))
-    Logger.dbg('Gateway supports following peripherals: ' + str(', '.join(peripherals.keys())))
-
-    capability = {
-        'raw' : caps, 
-        'commandIds' : commandIds, 
-        'channels' : channels, 
-        'peripherals' : peripherals,
+    return {
+        'raw': caps,
+        'commandIds': commandIds,
+        'channels': channels,
+        'peripherals': peripherals,
     }
-
-    return capability
         
 def getCommandIdMapping(gateway, command):
     capability = processCapability(gateway)
@@ -558,7 +531,7 @@ def _onPing(args):
 
 def getLastGatewayCommandID():
     lastId = 0
-    gateways = getRequest(f'/api/gateway')
+    gateways = getRequest('/api/gateway')
 
     for gateway in gateways:
         commands = getRequest(f'/api/gateway/{gateway["agentId"]}/command')
@@ -615,9 +588,12 @@ def onJitter(args):
     channelsToUpdate = []
 
     for _gateway in gateways:
-        if len(args.gateway_id) > 0:
-            if _gateway["agentId"].lower() != args.gateway_id.lower() and _gateway["name"].lower() != args.gateway_id.lower():
-                continue
+        if (
+            len(args.gateway_id) > 0
+            and _gateway["agentId"].lower() != args.gateway_id.lower()
+            and _gateway["name"].lower() != args.gateway_id.lower()
+        ):
+            continue
 
         gateway = getRequest(f'/api/gateway/{_gateway["agentId"]}')
         capability = processCapability(gateway)
@@ -635,9 +611,12 @@ def onJitter(args):
                     })
 
         for relay in gateway['relays']:
-            if len(args.relay_id) > 0:
-                if relay["agentId"].lower() != args.relay_id.lower() and relay["name"].lower() != args.relay_id.lower():
-                    continue
+            if (
+                len(args.relay_id) > 0
+                and relay["agentId"].lower() != args.relay_id.lower()
+                and relay["name"].lower() != args.relay_id.lower()
+            ):
+                continue
 
             for channel in relay['channels']:
                 name = list(capability['channels'].keys())[list(capability['channels'].values()).index(channel['type'])]
@@ -650,7 +629,7 @@ def onJitter(args):
                         'kind' : 'Relay',
                     })
 
-    if len(channelsToUpdate) == 0:
+    if not channelsToUpdate:
         Logger.fatal('Could not find channels that should have their Jitter updated. Try changing search criteria.')
 
     for channel in channelsToUpdate:
@@ -839,9 +818,9 @@ def onGoogleDriveClear(args):
 
 def getDeviceName(gateway, devicesType, deviceType):
     capability = processCapability(gateway)
-    name = list(capability[devicesType].keys())[list(capability[devicesType].values()).index(deviceType)]
-
-    return name
+    return list(capability[devicesType].keys())[
+        list(capability[devicesType].values()).index(deviceType)
+    ]
 
 def collectChannels(args, channelName):
     channels = []
@@ -863,16 +842,21 @@ def collectChannels(args, channelName):
         Logger.info(f'Collecting channels matching name/ID: {channel_id}')
 
     for _gateway in gateways:
-        if len(gateway_id) > 0:
-            if _gateway["agentId"].lower() != gateway_id.lower() and _gateway["name"].lower() != gateway_id.lower():
-                continue
+        if (
+            len(gateway_id) > 0
+            and _gateway["agentId"].lower() != gateway_id.lower()
+            and _gateway["name"].lower() != gateway_id.lower()
+        ):
+            continue
 
         gateway = getRequest(f'/api/gateway/{_gateway["agentId"]}')
 
         for channel in gateway['channels']:
-            if len(channel_id) > 0:
-                if channel["iid"].lower() != channel_id.lower():
-                    continue
+            if (
+                len(channel_id) > 0
+                and channel["iid"].lower() != channel_id.lower()
+            ):
+                continue
 
             name = getDeviceName(gateway, 'channels', channel['type'])
 
@@ -887,15 +871,20 @@ def collectChannels(args, channelName):
             })
 
         for relay in gateway['relays']:
-            if len(relay_id) > 0:
-                if relay["agentId"].lower() != relay_id.lower() and relay["name"].lower() != relay_id.lower():
-                    continue
+            if (
+                len(relay_id) > 0
+                and relay["agentId"].lower() != relay_id.lower()
+                and relay["name"].lower() != relay_id.lower()
+            ):
+                continue
 
             if 'channels' in relay.keys():
                 for channel in relay['channels']:
-                    if len(channel_id) > 0:
-                        if channel["iid"].lower() != channel_id.lower():
-                            continue
+                    if (
+                        len(channel_id) > 0
+                        and channel["iid"].lower() != channel_id.lower()
+                    ):
+                        continue
 
                     name = getDeviceName(gateway, 'channels', channel['type'])
 
@@ -952,8 +941,7 @@ def shell(cmd, alternative = False, stdErrToStdout = False, surpressStderr = Fal
             logger.err('WARNING! The command timed-out! Results may be incomplete')
             outs, errs = proc.communicate()
 
-    status = outs.decode(errors='ignore').strip()
-    return status
+    return outs.decode(errors='ignore').strip()
 
 def onAlarmRelay(args):
     origRelays = collectRelays(args, nonFatal = True)
@@ -993,7 +981,7 @@ currLastTimestamp:  {currLastTimestamp}
 New Relay?          {currLastTimestamp > lastTimestamp and len(relaysDiff) > 0}
 ''')
 
-            if currLastTimestamp > lastTimestamp and len(relaysDiff) > 0:
+            if currLastTimestamp > lastTimestamp and relaysDiff:
                 lastTimestamp = currLastTimestamp
                 origRelayIds = currRelayIds
 
@@ -1007,7 +995,7 @@ New Relay?          {currLastTimestamp > lastTimestamp and len(relaysDiff) > 0}
                         newestRelayGateway = gateway
                         break
 
-                if newestRelay == None:
+                if newestRelay is None:
                     continue
 
                 print('[+] New Relay checked-in!')
@@ -1066,7 +1054,7 @@ New Relay?          {currLastTimestamp > lastTimestamp and len(relaysDiff) > 0}
 
                 except Exception as e:
                     print(f'[-] Exception occured during New-Relay alarm trigger: {e}')
-    
+
     except KeyboardInterrupt:
         print('[.] New Relay alarm loop was finished.')
 
@@ -1134,7 +1122,9 @@ def closeRelay(gateway, relay):
         }
     }
 
-    Logger.dbg(f'Closing Relay {relay["agentId"]} (id: {relay["agentId"]}). with following parameters:\n\n' + json.dumps(data, indent = 4))
+    Logger.dbg(
+        f'Closing Relay {relay["agentId"]} (id: {relay["agentId"]}). with following parameters:\n\n{json.dumps(data, indent=4)}'
+    )
 
     ret = postRequest(f'/api/gateway/{gateway["agentId"]}/relay/{relay["agentId"]}/command', data, rawResp = True)
     if ret.status_code == 201:
@@ -1153,7 +1143,7 @@ def closeRelay(gateway, relay):
                             chan['url'] = f'/api/gateway/{gateway["agentId"]}/channel/{chan["iid"]}/command'
                         else:
                             chan['url'] = f'/api/gateway/{gateway["agentId"]}/relay/{relayNode["agentId"]}/channel/{chan["iid"]}/command'
-                            
+
                         closeChannel(chan, getDeviceName(gateway, 'channels', chan['type']))
                         closed = True
                         break
@@ -1184,7 +1174,9 @@ def closePeripheral(gateway, relay, peripheralName, peripheralId):
         }
     }
 
-    Logger.dbg(f'Closing peripheral {peripheralName} (id: {peripheralId}). with following parameters:\n\n' + json.dumps(data, indent = 4))
+    Logger.dbg(
+        f'Closing peripheral {peripheralName} (id: {peripheralId}). with following parameters:\n\n{json.dumps(data, indent=4)}'
+    )
 
     ret = postRequest(f'/api/gateway/{gateway["agentId"]}/relay/{relay["agentId"]}/peripheral/{peripheralId}/command', data, rawResp = True)
     if ret.status_code == 201:
@@ -1208,7 +1200,9 @@ def closeChannel(channel, channelToClose):
         }
     }
 
-    Logger.dbg(f'Closing {channelToClose} channel (id: {chanId}). with following parameters:\n\n' + json.dumps(data, indent = 4))
+    Logger.dbg(
+        f'Closing {channelToClose} channel (id: {chanId}). with following parameters:\n\n{json.dumps(data, indent=4)}'
+    )
 
     ret = postRequest(channel["url"], data, rawResp = True)
     if ret.status_code == 201:
@@ -1233,7 +1227,9 @@ def closeNetwork(gateway):
         }
     }
 
-    Logger.dbg(f'Closing gateway {gateway["name"]} with following parameters:\n\n' + json.dumps(data, indent = 4))
+    Logger.dbg(
+        f'Closing gateway {gateway["name"]} with following parameters:\n\n{json.dumps(data, indent=4)}'
+    )
 
     ret = postRequest(f'/api/gateway/{gateway["agentId"]}/command', data, rawResp = True)
     if ret.status_code == 201:
@@ -1242,7 +1238,7 @@ def closeNetwork(gateway):
         print(f'[-] Network on gateway {gateway["name"]} (id: {gateway["agentId"]}) was not cleared: ({ret.status_code}) {ret.text}')
 
 def onCloseNetwork(args):
-    gateways = getRequest(f'/api/gateway')
+    gateways = getRequest('/api/gateway')
 
     for _gateway in gateways:
         gateway = getRequest(f'/api/gateway/{_gateway["agentId"]}')
@@ -1254,39 +1250,23 @@ def onCloseChannel(args):
     channelsToClose = []
 
     for _gateway in gateways:
-        if len(args.gateway_id) > 0:
-            if _gateway["agentId"].lower() != args.gateway_id.lower() and _gateway["name"].lower() != args.gateway_id.lower():
-                continue
+        if (
+            len(args.gateway_id) > 0
+            and _gateway["agentId"].lower() != args.gateway_id.lower()
+            and _gateway["name"].lower() != args.gateway_id.lower()
+        ):
+            continue
 
         gateway = getRequest(f'/api/gateway/{_gateway["agentId"]}')
         capability = processCapability(gateway)
 
-        if len(args.gateway_id) > 0:
-            if gateway["agentId"].lower() == args.agent_id.lower() or gateway["name"].lower() == args.agent_id.lower():
-                for channel in gateway['channels']:
-                    name = getDeviceName(gateway, 'channels', channel['type'])
-                    if len(args.channel_id) == 0 or (name.lower() == args.channel_id.lower() or channel['iid'] == args.channel_id):
-                        _type = 'non-negotiation'
-                        if 'isReturnChannel' in channel.keys() and channel['isReturnChannel']: _type = 'grc'
-                        elif 'isNegotiationChannel' in channel.keys() and channel['isNegotiationChannel']: _type = 'negotiation'
-
-                        channelsToClose.append({
-                            'url' : f'/api/gateway/{_gateway["agentId"]}/relay/{relay["agentId"]}/channel/{channel["iid"]}/command',
-                            'name' : name,
-                            'iid' : channel['iid'],
-                            'agent' : relay,
-                            'type' : _type,
-                            'kind' : 'Relay',
-                        })
-
-        for relay in gateway['relays']:
-            if relay["agentId"].lower() != args.agent_id.lower() and relay["name"].lower() != args.agent_id.lower():
-                continue
-
-            for channel in relay['channels']:
+        if len(args.gateway_id) > 0 and (
+            gateway["agentId"].lower() == args.agent_id.lower()
+            or gateway["name"].lower() == args.agent_id.lower()
+        ):
+            for channel in gateway['channels']:
                 name = getDeviceName(gateway, 'channels', channel['type'])
                 if len(args.channel_id) == 0 or (name.lower() == args.channel_id.lower() or channel['iid'] == args.channel_id):
-                    
                     _type = 'non-negotiation'
                     if 'isReturnChannel' in channel.keys() and channel['isReturnChannel']: _type = 'grc'
                     elif 'isNegotiationChannel' in channel.keys() and channel['isNegotiationChannel']: _type = 'negotiation'
@@ -1300,7 +1280,28 @@ def onCloseChannel(args):
                         'kind' : 'Relay',
                     })
 
-    if len(channelsToClose) == 0:
+        for relay in gateway['relays']:
+            if relay["agentId"].lower() != args.agent_id.lower() and relay["name"].lower() != args.agent_id.lower():
+                continue
+
+            for channel in relay['channels']:
+                name = getDeviceName(gateway, 'channels', channel['type'])
+                if len(args.channel_id) == 0 or (name.lower() == args.channel_id.lower() or channel['iid'] == args.channel_id):
+
+                    _type = 'non-negotiation'
+                    if 'isReturnChannel' in channel.keys() and channel['isReturnChannel']: _type = 'grc'
+                    elif 'isNegotiationChannel' in channel.keys() and channel['isNegotiationChannel']: _type = 'negotiation'
+
+                    channelsToClose.append({
+                        'url' : f'/api/gateway/{_gateway["agentId"]}/relay/{relay["agentId"]}/channel/{channel["iid"]}/command',
+                        'name' : name,
+                        'iid' : channel['iid'],
+                        'agent' : relay,
+                        'type' : _type,
+                        'kind' : 'Relay',
+                    })
+
+    if not channelsToClose:
         Logger.fatal('Could not find channels that should have been closed. Try changing search criteria.')
 
     for channel in channelsToClose:
@@ -1627,7 +1628,7 @@ def onSpawnBeacon(args):
             print(f'[-] Beacon could not be spawned: ({ret.status_code}) {ret.text}')
 
 def onTurnOnTeamserver(args):
-    gateways = getRequest(f'/api/gateway')
+    gateways = getRequest('/api/gateway')
     gateway = None
 
     for _gateway in gateways:
@@ -1661,8 +1662,10 @@ def onTurnOnTeamserver(args):
         }
     }
 
-    Logger.dbg(f'Will Turn On connector TeamServer on gateway {gateway["name"]} with following parameters:\n\n' + json.dumps(data, indent = 4))
-    
+    Logger.dbg(
+        f'Will Turn On connector TeamServer on gateway {gateway["name"]} with following parameters:\n\n{json.dumps(data, indent=4)}'
+    )
+
     ret = postRequest(f'/api/gateway/{gateway["agentId"]}/command', data, rawResp = True)
 
     if ret.status_code == 201:
@@ -1671,7 +1674,7 @@ def onTurnOnTeamserver(args):
         print(f'[-] Could not establish connection with Teamserver: ({ret.status_code}) {ret.text}')
 
 def onTurnOffConnector(args):
-    gateways = getRequest(f'/api/gateway')
+    gateways = getRequest('/api/gateway')
     gateway = None
 
     for _gateway in gateways:
@@ -1693,8 +1696,10 @@ def onTurnOffConnector(args):
         }
     }
 
-    Logger.dbg(f'Will Turn Off connector TeamServer on gateway {gateway["name"]} with following parameters:\n\n' + json.dumps(data, indent = 4))
-    
+    Logger.dbg(
+        f'Will Turn Off connector TeamServer on gateway {gateway["name"]} with following parameters:\n\n{json.dumps(data, indent=4)}'
+    )
+
     ret = postRequest(f'/api/gateway/{gateway["agentId"]}/connector/{args.connector_id}/command', data, rawResp = True)
 
     if ret.status_code == 201:

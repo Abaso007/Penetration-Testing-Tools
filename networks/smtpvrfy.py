@@ -25,11 +25,11 @@ def interpret_smtp_status_code(resp):
         550:'Requested action not taken: mailbox unavailable', 
         551:'User not local; please try <forward-path>', 
     }
-    
-    if code in messages.keys():
-        return '({} {})'.format(code, messages[code])
+
+    if code in messages:
+        return f'({code} {messages[code]})'
     else:
-        return '({} code unknown)'.format(code)
+        return f'({code} code unknown)'
 
 def vrfy(server, username, port, timeout, brute=False):
 

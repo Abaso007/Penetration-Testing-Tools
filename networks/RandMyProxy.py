@@ -57,12 +57,12 @@ proxydbURL = 'http://proxydb.net/?anonlvl=2&anonlvl=3&anonlvl=4'
 def verbose(x):
     if config['quiet']: return
     if config['verbose'] or config['debug']:
-        print('[verbose] ' + x)
+        print(f'[verbose] {x}')
 
 def dbg(x):
     if config['quiet']: return
     if config['debug']:
-        print('[ debug ] ' + x)
+        print(f'[ debug ] {x}')
 
 def info(x):
     if config['quiet']: return
@@ -85,19 +85,23 @@ def gimmeProxy():
 
         out = req.json()
 
-        if 'protocol' in out.keys() and 'ip' in out.keys() and 'port' in out.keys() and 'country' in out.keys():
-            verbose(f"Got proxy: {out['protocol']} {out['ip']}:{out['port']}")
-
-            notes = f'country: {out["country"]}'
-            return out['protocol'], out['ip'], int(out['port']), notes
-        else:
+        if (
+            'protocol' not in out.keys()
+            or 'ip' not in out.keys()
+            or 'port' not in out.keys()
+            or 'country' not in out.keys()
+        ):
             raise Exception('Non conformant response.')
 
+        verbose(f"Got proxy: {out['protocol']} {out['ip']}:{out['port']}")
+
+        notes = f'country: {out["country"]}'
+        return out['protocol'], out['ip'], int(out['port']), notes
     except Exception as e:
         if 'Rate limited' in str(e):
             verbose('Cooling down, we got throttled.')
             time.sleep(15)
-        
+
         else:
             info(f'[!] Exception occured while retrieving GimmeProxy result: {e}')
 
@@ -111,9 +115,9 @@ def checkProxy(host, port):
         s.connect((host, port))
         s.close()
 
-        dbg(f'Proxy validated.')
+        dbg('Proxy validated.')
         return True
-    
+
     except Exception as e:
         dbg(f'Could not validate proxy {host}:{port} - exception: {e}')
         return False
@@ -125,16 +129,8 @@ def generateProxychains(proxies):
 #
 
 '''
-    if not config['no_quiet']:
-        data += 'quiet_mode\n'
-    else:
-        data += '#quiet_mode\n'
-
-    if not config['dont_proxy_dns']:
-        data += 'proxy_dns\n'
-    else:
-        data += '#proxy_dns\n'
-
+    data += '#quiet_mode\n' if config['no_quiet'] else 'quiet_mode\n'
+    data += '#proxy_dns\n' if config['dont_proxy_dns'] else 'proxy_dns\n'
     data += '\n'
 
     data += f'{config["chain_pick"]}_chain\n'
@@ -154,7 +150,7 @@ def generateProxychains(proxies):
     for p in proxies:
         c = ''
         if len(p[3]) > 0:
-            c = '# ' + p[3]
+            c = f'# {p[3]}'
 
         data += f'{p[0]:10} {p[1]:>20} {p[2]:<10} {c}\n'
 
@@ -206,9 +202,8 @@ def main(argv):
     maxerr = 3
     checkedHosts = {}
 
-    j = 1
     err = 0
-    for i in range(config['proxies_num']):
+    for j, _ in enumerate(range(config['proxies_num']), start=1):
         verbose(f'Looking up proxy #{j}...')
 
         while True:
@@ -217,7 +212,7 @@ def main(argv):
             if host == '':
                 err += 1
 
-            if host in checkedHosts.keys():
+            if host in checkedHosts:
                 verbose('That proxy was already checked. Skipping it.')
                 checkedHosts[host] += 1
 
@@ -229,13 +224,12 @@ def main(argv):
                     dbg(f'Added proxy #{j} to chain.')
                     break
 
-            if host in checkedHosts.keys():
+            if host in checkedHosts:
                 if checkedHosts[host] > maxerr:
                     break
             elif len(host) > 0:
                 checkedHosts[host] = 1
 
-        j += 1
         if err > maxerr:
             sys.stderr.write('Could not acquire proxies list. Fatal.')
             return False
@@ -265,8 +259,8 @@ Resulting proxy chain:
         for p in proxies:
             c = ''
             if len(p[3]) > 0:
-                c = '# ' + p[3]
-                
+                c = f'# {p[3]}'
+
             print(f'{p[0]:10} {p[1]:>20} {p[2]:<10} {c}')
 
         if not config['quiet']: sys.stderr.write('---------------------------------------------------------------')

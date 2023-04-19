@@ -81,28 +81,28 @@ class Logger:
     @staticmethod
     def verbose(x): 
         if config['verbose']:
-            Logger._out('[*] ' + x)
+            Logger._out(f'[*] {x}')
     
     @staticmethod
     def info(x):
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
 
     @staticmethod
     def dbg(x):
         if config['debug']:
-            Logger._out('[dbg] ' + x)
+            Logger._out(f'[dbg] {x}')
     
     @staticmethod
     def err(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 class InMemoryZip(object):
     # Source: 
@@ -130,7 +130,7 @@ def fetch_files(rootdir):
         for filename in files:
             real_path = os.path.join(folder, filename)
             with open(real_path, 'rb') as src:
-                zip_path = real_path.replace(rootdir + '/', '')
+                zip_path = real_path.replace(f'{rootdir}/', '')
                 imz.append(zip_path, src.read())
 
     return imz.read()
@@ -156,13 +156,7 @@ def reformatOutput(contents):
     return out
 
 def checkChar(a):
-    if a >= 0x20 or a <= 0x7f:
-        return True
-
-    if a in [0x0a, 0x0d, 9]:
-        return True
-
-    return False
+    return True if a >= 0x20 or a <= 0x7f else a in [0x0a, 0x0d, 9]
 
 def encodeFile(filePath, contents, dontZip):
     global fileWasEncoded
@@ -226,9 +220,10 @@ def retypeFile(contents):
         if abs(prevPos.x - retypeMousePos.x) > config['maxMouseDeviationInPixels'] or \
             abs(prevPos.y - retypeMousePos.y) > config['maxMouseDeviationInPixels']:
 
-            msg = "[?] Mouse cursor was moved away from initially focused position. File upload PAUSED.\n"
-            msg += "    Press ENTER to resume upload or Ctrl-C to interrupt.\n"
-
+            msg = (
+                "[?] Mouse cursor was moved away from initially focused position. File upload PAUSED.\n"
+                + "    Press ENTER to resume upload or Ctrl-C to interrupt.\n"
+            )
             progressBar.write(msg)
 
             input('')
@@ -242,7 +237,7 @@ def retypeFile(contents):
             progressBar.clear()
             progressBar.unpause()
             progressBar.refresh()
-            
+
         pyautogui.write(chunk, interval = (float(config['interval']) / 1000.0))
         progressBar.update(len(chunk))
 
@@ -254,21 +249,21 @@ def retypeFile(contents):
 def printInstructions(hash1, hash2, filePath):
     additional = ''
     basename = os.path.basename(filePath)
-    inputFile = basename + '.txt' if fileWasEncoded else basename
+    inputFile = f'{basename}.txt' if fileWasEncoded else basename
     output = basename
 
     if config['zip']:
-        output = basename + '.zip'
+        output = f'{basename}.zip'
 
     if config['format'] == 'certutil':
-        inputFile = basename + '.b64'
+        inputFile = f'{basename}.b64'
         additional = f'''
         *) Base64 decode file using certutil:
             cmd> certutil -decode {inputFile} {output}
 '''
-    
-    elif config['format'] != 'certutil' and config['base64']:
-        inputFile = basename + '.b64'
+
+    elif config['base64']:
+        inputFile = f'{basename}.b64'
         additional = f'''
         *) Base64 decode file:
             $ cat {inputFile} | base64 -d > {output}
@@ -324,7 +319,13 @@ def parseOptions(argv):
     parser.add_argument('-v', '--verbose', action='store_true', help='Displays verbose output containing field steps to follow.')
     parser.add_argument('-D', '--debug', action='store_true', help='Display debug output.')
 
-    parser.add_argument('-f', '--format', choices=outputFormats, default='raw', help=f'Specifies into which format retype input file. Default: retype the file as is. "certutil" format implies --base64')
+    parser.add_argument(
+        '-f',
+        '--format',
+        choices=outputFormats,
+        default='raw',
+        help='Specifies into which format retype input file. Default: retype the file as is. "certutil" format implies --base64',
+    )
 
     timing = parser.add_argument_group('Timing & Performance', 'Adjusts settings impacting program\'s "upload" efficiency')
     timing.add_argument('-w', '--wait', type=int, default=config['wait'], help=f'Hold on before we start retyping file contents for this long (in seconds). Default: {config["wait"]} seconds.')
@@ -387,13 +388,13 @@ def main(argv):
         Logger.err(f'Could not open file for reading: "{opts.inputFile}"')
         return False
 
-    if contents == None or len(contents) == 0:
+    if contents is None or len(contents) == 0:
         Logger.fail("Specified file/directory was empty.")
         return False
 
     encoded = encodeFile(opts.inputFile, contents, dontZip)
 
-    if encoded == None or len(encoded) == 0:
+    if encoded is None or len(encoded) == 0:
         Logger.fail("No encoded data to upload.")
         return False
 
@@ -402,8 +403,8 @@ def main(argv):
     hash1 = hashlib.md5(contents).hexdigest()
     hash2 = hashlib.md5(encoded.encode()).hexdigest()
 
-    Logger.ok('MD5 checksum of file to be uploaded:        ' + hash1)
-    Logger.ok('MD5 checksum of encoded data to be retyped: ' + hash2)
+    Logger.ok(f'MD5 checksum of file to be uploaded:        {hash1}')
+    Logger.ok(f'MD5 checksum of encoded data to be retyped: {hash2}')
     Logger.info(f'Size of input {t}: {len(contents)} - keys to retype: {len(encoded)}')
     Logger.verbose(f'Inter-key press interval: {opts.interval} miliseconds.')
     Logger.verbose(f'Every chunk cooldown delay: {1000*opts.delay} miliseconds.')

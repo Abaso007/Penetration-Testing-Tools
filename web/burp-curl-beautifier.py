@@ -35,9 +35,8 @@ for k, v in superfluous_headers.items():
 	val = v
 	if not val:
 		val = "[^']+"
-	rex = r" -H '" + k + ": " + val + "' "
-	m = re.search(rex, data)
-	if m:
+	rex = f" -H '{k}: {val}' "
+	if m := re.search(rex, data):
 		data = re.sub(rex, ' ', data)
 
 data = re.sub(r"'(http[^']+)'$", r'"\1"', data)

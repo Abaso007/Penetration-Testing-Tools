@@ -57,7 +57,7 @@ CHUNK_SIZE = 512
 
 def generateRandomId():
     randomized = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(50))
-    return "xxx" + randomized + "yyy"
+    return f"xxx{randomized}yyy"
 
 # note that this decorator ignores **kwargs
 def memoize(obj):
@@ -91,14 +91,14 @@ class SendRawHttpRequest:
             else:
                 self.sock = sock
 
-            self.sock.settimeout(timeout)                
+            self.sock.settimeout(timeout)
             self.sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
             self.sock.connect((host, port))
-            self.logger.dbg('Connected with {}'.format(host))
+            self.logger.dbg(f'Connected with {host}')
             return True
 
         except Exception as e:
-            self.logger.err('[!] Could not connect with {}:{}!'.format(host, port))
+            self.logger.err(f'[!] Could not connect with {host}:{port}!')
             if self.proxyOptions['debug']:
                 raise
             return False
@@ -164,9 +164,9 @@ class ProxyHandler:
     def createConnection(self):
         self.databaseInstance = Database()
 
-        self.logger.info("Connecting to MySQL database: {}@{} ...".format(
-            config['mysql-user'], config['mysql-host']
-        ))
+        self.logger.info(
+            f"Connecting to MySQL database: {config['mysql-user']}@{config['mysql-host']} ..."
+        )
         self.connection = self.databaseInstance.connection(  config['mysql-host'], 
                                                         config['mysql-user'], 
                                                         config['mysql-pass'],
@@ -174,7 +174,7 @@ class ProxyHandler:
 
         if not self.connection:
             self.logger.err('Could not connect to the MySQL database! ' \
-                'Please configure inner `MySQL` variables such as Host, User, Password.')
+                    'Please configure inner `MySQL` variables such as Host, User, Password.')
             sys.exit(1)
 
         self.logger.info('Connected.')
@@ -183,20 +183,17 @@ class ProxyHandler:
         try:
             assert self.connection
             database_lock.acquire()
-            if not params:
-                out = self.databaseInstance.query(query)
-            else:
-                out = self.databaseInstance.query(query, params = params)
-
+            out = (
+                self.databaseInstance.query(query, params=params)
+                if params
+                else self.databaseInstance.query(query)
+            )
             database_lock.release()
-            if not out:
-                return []
-            return out
-
+            return out if out else []
         except Exception as e:
-            self.logger.err('SQL query ("{}", params: {}) has failed: {}'.format(
-                query, str(params), str(e)
-            ))
+            self.logger.err(
+                f'SQL query ("{query}", params: {str(params)}) has failed: {str(e)}'
+            )
             database_lock.release()
             if self.proxyOptions['debug']:
                 raise
@@ -205,15 +202,14 @@ class ProxyHandler:
     @staticmethod
     @memoize
     def requestToString(request):
-        headers = '\r\n'.join(['{}: {}'.format(k, v) for k, v in request.headers.items()])
-        out = '{} {} {}\r\n{}'.format(request.command, request.path, request.request_version, headers)
-        return out
+        headers = '\r\n'.join([f'{k}: {v}' for k, v in request.headers.items()])
+        return f'{request.command} {request.path} {request.request_version}\r\n{headers}'
 
     @staticmethod
     def getPingbackUrl(request):
         #guid = str(uuid.uuid4())
         guid = generateRandomId()
-        url = "http://{}.{}/".format(guid, config['pingback-host'])
+        url = f"http://{guid}.{config['pingback-host']}/"
         return (url, guid)
 
     def saveRequestForCorrelation(self, request, pingback, uuid, where):
@@ -231,45 +227,78 @@ class ProxyHandler:
 
     def hostOverriding(self):
         (pingback, uuid) = ProxyHandler.getPingbackUrl(self.request)
-        requestData = 'GET {} HTTP/1.1\r\n'.format(pingback)
-        requestData+= 'Host: {}\r\n'.format(self.request.headers['Host'])
+        requestData = (
+            f'GET {pingback} HTTP/1.1\r\n'
+            + f"Host: {self.request.headers['Host']}\r\n"
+        )
         requestData+= 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36\r\n'
         requestData+= 'Accept: */*\r\n'
         requestData+= 'Connection: close\r\n'
 
-        self.saveRequestForCorrelation(self.request, pingback, uuid, 'Overridden Host header ({} -> GET /{} )'.format(self.request.headers['Host'], pingback))
+        self.saveRequestForCorrelation(
+            self.request,
+            pingback,
+            uuid,
+            f"Overridden Host header ({self.request.headers['Host']} -> GET /{pingback} )",
+        )
         ProxyHandler.sendRawRequest(self.request, requestData, self.proxyOptions, self.logger)
-        self.logger.dbg('(2) Re-sending host overriding request ({} -> {})'.format(self.request.path, pingback))
+        self.logger.dbg(
+            f'(2) Re-sending host overriding request ({self.request.path} -> {pingback})'
+        )
 
     def hostAtManipulation(self):
         (pingback, uuid) = ProxyHandler.getPingbackUrl(self.request)
-        url = urljoin(self.request.scheme + '://', self.request.headers['Host'], self.request.path)
+        url = urljoin(
+            f'{self.request.scheme}://',
+            self.request.headers['Host'],
+            self.request.path,
+        )
         parsed = urlparse(pingback)
 
-        requestData = 'GET {} HTTP/1.1\r\n'.format(pingback)
-        requestData+= 'Host: {}@{}\r\n'.format(self.request.headers['Host'], parsed.netloc)
+        requestData = (
+            f'GET {pingback} HTTP/1.1\r\n'
+            + f"Host: {self.request.headers['Host']}@{parsed.netloc}\r\n"
+        )
         requestData+= 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36\r\n'
         requestData+= 'Accept: */*\r\n'
         requestData+= 'Connection: close\r\n'
 
-        self.saveRequestForCorrelation(self.request, pingback, uuid, 'Host header manipulation ({} -> {}@{})'.format(self.request.headers['Host'], self.request.headers['Host'], parsed.netloc))
+        self.saveRequestForCorrelation(
+            self.request,
+            pingback,
+            uuid,
+            f"Host header manipulation ({self.request.headers['Host']} -> {self.request.headers['Host']}@{parsed.netloc})",
+        )
         ProxyHandler.sendRawRequest(self.request, requestData, self.proxyOptions, self.logger)
-        self.logger.dbg('(3) Re-sending host header @ manipulated request ({} -> {}@{})'.format(self.request.headers['Host'], self.request.headers['Host'], parsed.netloc))
+        self.logger.dbg(
+            f"(3) Re-sending host header @ manipulated request ({self.request.headers['Host']} -> {self.request.headers['Host']}@{parsed.netloc})"
+        )
 
     def sendMisroutedRequests(self):
         (pingback, uuid) = ProxyHandler.getPingbackUrl(self.request)
-        url = urljoin(self.request.scheme + '://', self.request.headers['Host'], self.request.path)
+        url = urljoin(
+            f'{self.request.scheme}://',
+            self.request.headers['Host'],
+            self.request.path,
+        )
         url = url.replace(':///', "://")
         parsed = urlparse(pingback)
 
-        self.saveRequestForCorrelation(self.request, pingback, uuid, 'Hijacked Host header ({} -> {})'.format(self.request.headers['Host'], parsed.netloc))
-        self.logger.dbg('ok(1) Re-sending misrouted request with hijacked Host header ({} -> {})'.format(self.request.headers['Host'], parsed.netloc))
+        self.saveRequestForCorrelation(
+            self.request,
+            pingback,
+            uuid,
+            f"Hijacked Host header ({self.request.headers['Host']} -> {parsed.netloc})",
+        )
+        self.logger.dbg(
+            f"ok(1) Re-sending misrouted request with hijacked Host header ({self.request.headers['Host']} -> {parsed.netloc})"
+        )
 
         try:
-            self.logger.dbg('GET {}'.format(url))
+            self.logger.dbg(f'GET {url}')
             requests.get(url, headers = {'Host' : parsed.netloc})
         except Exception as e:
-            self.logger.err('Could not issue request to ({}): {}'.format(url, str(e)))
+            self.logger.err(f'Could not issue request to ({url}): {str(e)}')
             if self.proxyOptions['debug']:
                 raise
 
@@ -278,16 +307,18 @@ class ProxyHandler:
 
     @memoize
     def checkIfAlreadyManipulated(self, host):
-        query = 'SELECT desthost FROM {}.requests WHERE desthost = "{}"'.format(config['mysql-database'], host)
+        query = f"""SELECT desthost FROM {config['mysql-database']}.requests WHERE desthost = "{host}\""""
 
         rows = self.executeSql(query)
         if rows == False: return rows
         for row in rows:
             if self.request.headers['Host'] in row['desthost']:
-                self.logger.dbg('Host ({}) already was lured for pingback.'.format(row['desthost']))
+                self.logger.dbg(f"Host ({row['desthost']}) already was lured for pingback.")
                 return True
-        
-        self.logger.dbg('Host ({}) was not yet lured for pingback.'.format(self.request.headers['Host']))
+
+        self.logger.dbg(
+            f"Host ({self.request.headers['Host']}) was not yet lured for pingback."
+        )
         return False
 
     def request_handler(self, req, req_body):
@@ -309,11 +340,11 @@ class ProxyHandler:
                 (pingback, uuid) = ProxyHandler.getPingbackUrl(self.request)
                 self.request.headers[header] = pingback
                 if 'IP' in header:
-                    self.request.headers[header] = '{}.{}'.format(uuid, config['pingback-host'])
-                self.saveRequestForCorrelation(pingback, header, uuid, 'Header: {}'.format(header))
+                    self.request.headers[header] = f"{uuid}.{config['pingback-host']}"
+                self.saveRequestForCorrelation(pingback, header, uuid, f'Header: {header}')
 
             self.sendMisroutedRequests()
-            self.logger.info('Injected pingbacks for host ({}).'.format(host), forced = True)
+            self.logger.info(f'Injected pingbacks for host ({host}).', forced = True)
 
 
         return self.requestBody

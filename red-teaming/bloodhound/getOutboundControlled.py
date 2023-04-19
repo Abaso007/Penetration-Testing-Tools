@@ -70,15 +70,14 @@ def checkNodes(tx, nodes):
             }
 
     condition = ' OR '.join(conditionList)
-    interimResults = {}
-
-    for node in nodes:
-        interimResults[node] = {
-            'name' : node,
-            'first-degree' : 0,
-            'group-delegated' : 0,
+    interimResults = {
+        node: {
+            'name': node,
+            'first-degree': 0,
+            'group-delegated': 0,
         }
-    
+        for node in nodes
+    }
     # first-degree
     query = query_first_degree_outbound.replace('__CONDITION__', condition).strip().replace('\t', ' ').replace('\n', ' ')
     result1 = list(tx.run(query))
@@ -97,14 +96,12 @@ def checkNodes(tx, nodes):
     results.update(interimResults)
 
     if len(config['output']) > 0:
-        output = ''
-
-        for k, v in interimResults.items():
-            if config['include_group_delegated']:
-                output += f"{v['name']},{v['first-degree']},{v['group-delegated']}\n"
-            else:
-                output += f"{v['name']},{v['first-degree']}\n"
-
+        output = ''.join(
+            f"{v['name']},{v['first-degree']},{v['group-delegated']}\n"
+            if config['include_group_delegated']
+            else f"{v['name']},{v['first-degree']}\n"
+            for v in interimResults.values()
+        )
         with open(config['output'], 'a') as f:
             f.write(output)
 
@@ -148,11 +145,11 @@ Usage:  ./getOutboundControlled.py [options] <nodes-file>
 
     nodes = []
     with open(nodesFile) as f: 
-        for x in f.readlines():
+        for x in f:
             if x.strip().startswith('#'):
                 continue
 
-            if not '@' in x:
+            if '@' not in x:
                 raise Exception('Node names must include "@" and be in form: NAME@DOMAIN !')
             nodes.append(x.strip())
 
@@ -180,11 +177,7 @@ Usage:  ./getOutboundControlled.py [options] <nodes-file>
             log('[+] Connected to database. Working...')
             output = ''
 
-            if config['include_group_delegated']:
-                columns = columns2
-            else:
-                columns = columns1
-
+            columns = columns2 if config['include_group_delegated'] else columns1
             if config['output'] != '':
                 with open(config['output'], 'w') as f:
                     f.write(columns + '\n')
@@ -201,9 +194,7 @@ Usage:  ./getOutboundControlled.py [options] <nodes-file>
 
                 finishEta = ((len(nodes) / nodesToCheckPerStep) - runs) * (totalTime / float(runs))
 
-                if finishEta < 0: 
-                    finishEta = 0
-
+                finishEta = max(finishEta, 0)
                 log(f'[+] Checked {b}/{len(nodes)} nodes in {stop - start:.3f} seconds. Finish ETA: in {finishEta:.3f} seconds.')
 
     except KeyboardInterrupt:

